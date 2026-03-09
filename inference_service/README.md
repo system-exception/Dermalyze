@@ -1,36 +1,47 @@
 # Dermalyze Inference Service
 
-Standalone inference API for frontend deployment. This package is intentionally decoupled from training code in `skin_lesion_classifier/`.
+Standalone FastAPI service for skin lesion classification inference. This package is intentionally decoupled from the training pipeline (`../skin_lesion_classifier/`) to enable independent deployment with the frontend.
 
-## What To Deploy
+> ⚠️ **DISCLAIMER**: Educational/research purposes only. Not for medical diagnosis. Consult healthcare professionals for medical advice.
 
-- `inference_service/app.py`
-- `inference_service/predictor.py`
-- `inference_service/models/`
-- `inference_service/metadata.py`
-- `inference_service/tta_constants.py`
-- Your model checkpoint at `inference_service/model/checkpoint_best.pt` (or set `MODEL_CHECKPOINT`)
+## Architecture
 
-## Install
+- **Purpose**: Production inference API for frontend (`../frontend/`)
+- **Models**: EfficientNet-B0, ConvNeXt-Tiny (trained on HAM10000 dataset)
+- **Classes**: 7 skin lesion types (akiec, bcc, bkl, df, mel, nv, vasc)
+- **Features**: Test-Time Augmentation (TTA), CORS support, health checks
+- **Dependencies**: Minimal (PyTorch + FastAPI, no training libraries)
+
+## Quick Start
 
 ```bash
+# 1. Navigate to inference service
 cd inference_service
-python -m venv .venv
-source .venv/bin/activate
+
+# 2. Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Place your trained model checkpoint
+mkdir -p model
+# Copy checkpoint from training outputs:
+# cp ../skin_lesion_classifier/outputs/run_xxx/checkpoint_best.pt model/
+
+# 5. Run the API server
+uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-## Run API
+**Alternative** (run from repository root):
 
 ```bash
 uvicorn inference_service.app:app --host 0.0.0.0 --port 8000
 ```
 
-Alternative (from inside `inference_service/`):
-
-```bash
-uvicorn app:app --host 0.0.0.0 --port 8000
-```
+API will be available at: **http://localhost:8000**  
+API docs: **http://localhost:8000/docs**
 
 ## Environment Variables
 
@@ -58,9 +69,49 @@ Response:
   ]
 }
 ```
+Endpoints
 
-## Frontend Env Example
+- `GET /` - Health check
+- `GET /health` - Detailed health status
+- `POST /classify` - Classify skin lesion image
+
+## Frontend Integration
+
+Configure frontend (`../frontend/.env.local`):
 
 ```env
 VITE_API_URL=http://localhost:8000
+```
+
+See [`../frontend/README.md`](../frontend/README.md) for full frontend setup.
+
+## Model Checkpoint
+
+Place your trained checkpoint at:
+
+```
+inference_service/model/checkpoint_best.pt
+```
+
+Or train one using the ML pipeline:
+
+```bash
+cd ../skin_lesion_classifier
+python src/train.py --config config.yaml
+# Copy best checkpoint to inference service
+cp outputs/run_xxx/checkpoint_best.pt ../inference_service/model/
+```
+
+See [`../skin_lesion_classifier/README.md`](../skin_lesion_classifier/README.md) for training details.
+
+## Deployment Files
+
+When deploying, include:
+- `inference_service/app.py` - FastAPI application
+- `inference_service/predictor.py` - Inference logic
+- `inference_service/models/` - Model architectures (efficientnet.py, convnext.py)
+- `inference_service/metadata.py` - Class labels and preprocessing
+- `inference_service/tta_constants.py` - Test-Time Augmentation configs
+- `inference_service/model/checkpoint_best.pt` - Trained model weights
+- `inference_service/requirements.txt` - DependenciesE_API_URL=http://localhost:8000
 ```

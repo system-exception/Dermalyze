@@ -1,0 +1,21 @@
+# render.yaml — Render Blueprint for the Dermalyze FastAPI backend
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: dermalyze-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CORS_ORIGINS
+        sync: false          # set this manually in the Render dashboard
+      - key: MODEL_PATH
+        value: ./model.pt    # place model.pt in the backend/ directory
+      - key: USE_JIT
+        value: "true"        # set to "false" if using raw state-dict checkpoint
+    disk:
+      name: model-storage
+      mountPath: /opt/render/project/src/backend
+      sizeGB: 1

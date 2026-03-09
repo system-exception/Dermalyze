@@ -1,0 +1,5 @@
+{
+  "name": "Dermalyze",
+  "description": "An AI-assisted skin lesion classification system designed as a clinical decision support tool for dermatologists and medical professionals.",
+  "requestFramePermissions": []
+}

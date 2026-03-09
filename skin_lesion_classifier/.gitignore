@@ -1,60 +1,11 @@
-# Data
-data/HAM10000
-data/isic2018val
-data/braaff-bald
+# Project-specific data and outputs
+# (General Python, IDE, OS, and log patterns are in root .gitignore)
 
-# Outputs and checkpoints
+# Data directories
+data/HAM10000/
+data/isic2018val/
+data/braaff-bald/
+
+# Training outputs and checkpoints
 evaluation_results/
 outputs/
-*.pt
-*.pth
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
-venv/
-env/
-.env/
-.venv/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Jupyter Notebooks
-.ipynb_checkpoints/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-tmp/
-temp/

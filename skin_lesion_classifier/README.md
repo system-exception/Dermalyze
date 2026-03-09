@@ -1,8 +1,18 @@
-# Dermalyze: Educational Skin Lesion Classification System
+# Dermalyze Training Pipeline
 
-Educational skin lesion classification system using EfficientNet-B0 for HAM10000 dataset (7 classes).
+ML training and evaluation pipeline for skin lesion classification using EfficientNet-B0 and ConvNeXt-Tiny on HAM10000 dataset.
 
 > ⚠️ **DISCLAIMER**: Educational/research purposes only. Not for medical diagnosis. Consult healthcare professionals for medical advice.
+
+## Architecture
+
+This is the **training component** of the Dermalyze project:
+
+- **Training Pipeline** (this directory): Model training, evaluation, hyperparameter tuning
+- **Inference Service**: [`../inference_service/`](../inference_service/README.md) - Standalone API for production deployment
+- **Frontend Application**: [`../frontend/`](../frontend/README.md) - Web UI for end users
+
+After training models here, copy the best checkpoint to `../inference_service/model/` for deployment.
 
 ## Key Features
 
@@ -70,37 +80,19 @@ python src/inference.py \
     --image path/to/image.jpg
 ```
 
-## Frontend API Integration
+## Exporting Models for Inference
 
-For production/frontend deployments, use the standalone inference package at
-`../inference_service` so inference can be deployed independently of training.
-
-Run from repository root:
+After training, copy your best checkpoint to the inference service:
 
 ```bash
-pip install -r inference_service/requirements.txt
-uvicorn inference_service.app:app --reload --host 0.0.0.0 --port 8000
+# Copy checkpoint to inference service
+cp outputs/run_xxx/checkpoint_best.pt ../inference_service/model/
+
+# Or copy an ensemble/kfold checkpoint
+cp outputs/kfold_sweep_1/fold_0/checkpoint_best.pt ../inference_service/model/
 ```
 
-Set your frontend env (`frontend/.env.local`):
-
-```env
-VITE_API_URL=http://localhost:8000
-```
-
-Optional API environment variables:
-
-- `MODEL_CHECKPOINT` (default: `inference_service/model/checkpoint_best.pt`)
-- `MODEL_IMAGE_SIZE` (default: `224`)
-- `USE_TTA` (`true`/`false`, default: `false`)
-- `TTA_MODE` (`light` | `medium` | `full`, default: `medium`)
-- `TTA_AGGREGATION` (`mean` | `geometric_mean` | `max`, default: `geometric_mean`)
-- `CORS_ORIGINS` (comma-separated frontend origins)
-
-API endpoint:
-
-- `POST /classify` with `multipart/form-data` field `file`
-- Response shape: `{ "classes": [{ "id": "mel", "name": "Melanoma", "score": 67.4 }, ...] }`
+Then follow [`../inference_service/README.md`](../inference_service/README.md) to run the API server for frontend integration.
 
 Windows (PowerShell):
 

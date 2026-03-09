@@ -1,0 +1,117 @@
+# -----------------------------
+# Logs
+# -----------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# -----------------------------
+# OS / Editor
+# -----------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# -----------------------------
+# Node / Frontend
+# -----------------------------
+node_modules/
+dist/
+dist-ssr/
+*.local*
+
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# Environment variables & secrets
+.env
+.env.*
+*.key
+*.pem
+secrets.json
+credentials.json
+
+# Testing & coverage
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# -----------------------------
+# ML artifacts and data
+# -----------------------------
+ml/
+*.pt
+*.pth
+
+skin_lesion_classifier/data/HAM10000/
+skin_lesion_classifier/data/isic2018val/
+skin_lesion_classifier/data/braaff-bald/
+
+skin_lesion_classifier/evaluation_results/
+skInference service models
+inference_service/model/
+
+# in_lesion_classifier/outputs/
+
+# -----------------------------
+# Notebooks / temp
+# ---
+
+# -----------------------------
+# Docker
+# -----------------------------
+docker-compose.override.yml
+
+# -----------------------------
+# Version control
+# -----------------------------
+*.orig--------------------------
+.ipynb_checkpoints/
+tmp/
+temp/

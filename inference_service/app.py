@@ -26,8 +26,21 @@ CLASS_NAMES: Dict[str, str] = {
     "vasc": "Vascular Lesion",
 }
 
-_DEFAULT_CHECKPOINT = Path(__file__).resolve().parent / "model" / "checkpoint_best.pt"
-CHECKPOINT_PATH = Path(os.environ.get("MODEL_CHECKPOINT", str(_DEFAULT_CHECKPOINT)))
+_SERVICE_DIR = Path(__file__).resolve().parent
+_DEFAULT_CHECKPOINT = _SERVICE_DIR / "models" / "checkpoint_best.pt"
+_LEGACY_DEFAULT_CHECKPOINT = _SERVICE_DIR / "model" / "checkpoint_best.pt"
+
+
+def _resolve_checkpoint_path() -> Path:
+    explicit = os.environ.get("MODEL_CHECKPOINT")
+    if explicit:
+        return Path(explicit)
+    if _DEFAULT_CHECKPOINT.exists():
+        return _DEFAULT_CHECKPOINT
+    return _LEGACY_DEFAULT_CHECKPOINT
+
+
+CHECKPOINT_PATH = _resolve_checkpoint_path()
 IMAGE_SIZE = int(os.environ.get("MODEL_IMAGE_SIZE", "224"))
 USE_TTA = os.environ.get("USE_TTA", "false").lower() == "true"
 TTA_MODE = os.environ.get("TTA_MODE", "medium")
