@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Button from './ui/Button';
 import { supabase } from '../lib/supabase';
 import type { AnalysisHistoryItem } from '../lib/types';
@@ -27,6 +27,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
   const [selected,     setSelected]     = useState<Set<string>>(new Set());
   const [confirmModal, setConfirmModal] = useState<'selected' | 'all' | null>(null);
   const [deleting,     setDeleting]     = useState(false);
+
+  const modalRef     = useRef<HTMLDivElement>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
 
   const mapRows = async (data: Record<string, unknown>[]): Promise<AnalysisHistoryItem[]> => {
     const paths = data
@@ -136,49 +139,114 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
   // ── Delete handlers ────────────────────────────────────────────────────────
   const handleDeleteSelected = async () => {
     setDeleting(true);
+    setHistoryError(null);
     const ids = [...selected];
 
-    const paths = ids
-      .map(id => historyItems.find(i => i.id === id)?.imagePath)
-      .filter((p): p is string => !!p);
-    if (paths.length > 0)
-      await supabase.storage.from('analysis-images').remove(paths);
+    try {
+      const paths = ids
+        .map(id => historyItems.find(i => i.id === id)?.imagePath)
+        .filter((p): p is string => !!p);
 
-    const { error } = await supabase.from('analyses').delete().in('id', ids);
-    if (!error) {
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage.from('analysis-images').remove(paths);
+        if (storageError) {
+          throw new Error(`Failed to remove images: ${storageError.message}`);
+        }
+      }
+
+      const { error: dbError } = await supabase.from('analyses').delete().in('id', ids);
+      if (dbError) {
+        throw new Error(`Failed to delete records: ${dbError.message}`);
+      }
+
       setHistoryItems(prev => prev.filter(i => !ids.includes(i.id)));
       setSelected(new Set());
       setSelectMode(false);
+      setConfirmModal(null);
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : 'Could not delete selected records. Please try again.',
+      );
+    } finally {
+      setDeleting(false);
     }
-    setDeleting(false);
-    setConfirmModal(null);
   };
 
   const handleClearAll = async () => {
     setDeleting(true);
+    setHistoryError(null);
 
-    const { data: allRows } = await supabase
-      .from('analyses')
-      .select('image_url')
-      .not('image_url', 'is', null);
-    const paths = (allRows ?? [])
-      .map(r => r.image_url as string)
-      .filter(p => !p.startsWith('http'));
-    if (paths.length > 0)
-      await supabase.storage.from('analysis-images').remove(paths);
+    try {
+      const { data: allRows, error: fetchError } = await supabase
+        .from('analyses')
+        .select('image_url')
+        .not('image_url', 'is', null);
+      if (fetchError) {
+        throw new Error(`Failed to fetch records: ${fetchError.message}`);
+      }
 
-    const { error } = await supabase.from('analyses').delete().not('id', 'is', null);
-    if (!error) {
+      const paths = (allRows ?? [])
+        .map(r => r.image_url as string)
+        .filter(p => !p.startsWith('http'));
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage.from('analysis-images').remove(paths);
+        if (storageError) {
+          throw new Error(`Failed to remove images: ${storageError.message}`);
+        }
+      }
+
+      const { error: dbError } = await supabase.from('analyses').delete().not('id', 'is', null);
+      if (dbError) {
+        throw new Error(`Failed to clear history: ${dbError.message}`);
+      }
+
       setHistoryItems([]);
       setSelected(new Set());
       setSelectMode(false);
       setHasMore(false);
+      setConfirmModal(null);
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : 'Could not clear history. Please try again.',
+      );
+    } finally {
+      setDeleting(false);
     }
-    setDeleting(false);
-    setConfirmModal(null);
   };
 
   const hasItems = historyItems.length > 0;
+
+  // Modal: Escape-to-close, focus trapping, and initial focus
+  useEffect(() => {
+    if (!confirmModal) return;
+
+    cancelBtnRef.current?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !deleting) {
+        setConfirmModal(null);
+        return;
+      }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last  = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [confirmModal, deleting]);
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 text-slate-900 pb-12">
@@ -279,6 +347,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
                     type="checkbox"
                     checked={selected.has(item.id)}
                     onChange={() => toggleSelect(item.id)}
+                    aria-label={`Select case DRM-${item.id.slice(0, 8).toUpperCase()}`}
                     className="w-4 h-4 rounded border-slate-300 accent-teal-600 cursor-pointer shrink-0"
                   />
                 )}
@@ -338,6 +407,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
                           type="checkbox"
                           checked={selected.has(item.id)}
                           onChange={() => toggleSelect(item.id)}
+                          aria-label={`Select case DRM-${item.id.slice(0, 8).toUpperCase()}`}
                           className="w-4 h-4 rounded border-slate-300 accent-teal-600 cursor-pointer"
                         />
                       </td>
@@ -460,7 +530,14 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
             onClick={() => !deleting && setConfirmModal(null)}
           />
           {/* Dialog */}
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 flex flex-col gap-5">
+          <div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-desc"
+            className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 flex flex-col gap-5"
+          >
             {/* Icon */}
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-50 mx-auto">
               <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -469,10 +546,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
             </div>
             {/* Text */}
             <div className="text-center">
-              <h2 className="text-base font-bold text-slate-900 mb-1">
+              <h2 id="delete-confirm-title" className="text-base font-bold text-slate-900 mb-1">
                 {confirmModal === 'all' ? 'Clear all history?' : `Delete ${selected.size} record${selected.size !== 1 ? 's' : ''}?`}
               </h2>
-              <p className="text-sm text-slate-500 leading-relaxed">
+              <p id="delete-confirm-desc" className="text-sm text-slate-500 leading-relaxed">
                 {confirmModal === 'all'
                   ? 'This will permanently delete all your analysis records. This action cannot be undone.'
                   : `This will permanently delete the selected record${selected.size !== 1 ? 's' : ''}. This action cannot be undone.`}
@@ -481,6 +558,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
             {/* Actions */}
             <div className="flex gap-3">
               <button
+                ref={cancelBtnRef}
                 onClick={() => setConfirmModal(null)}
                 disabled={deleting}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
