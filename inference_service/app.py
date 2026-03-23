@@ -15,7 +15,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 import jwt
 from jwt import PyJWKClient
 
@@ -113,7 +112,26 @@ CORS_ORIGIN_REGEX = os.environ.get(
 print(f"[config] CORS_ORIGINS: {', '.join(ORIGINS)}")
 print(f"[config] CORS_ORIGIN_REGEX: {CORS_ORIGIN_REGEX}")
 
-limiter = Limiter(key_func=get_remote_address)
+_trusted_proxy_ips_raw = os.environ.get("TRUSTED_PROXY_IPS", "127.0.0.1,::1")
+TRUSTED_PROXY_IPS = {
+    ip.strip() for ip in _trusted_proxy_ips_raw.split(",") if ip.strip()
+}
+
+
+def _rate_limit_key(request: Request) -> str:
+    """Use X-Forwarded-For when request comes from a trusted proxy."""
+    client_host = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+
+    if forwarded_for and ("*" in TRUSTED_PROXY_IPS or client_host in TRUSTED_PROXY_IPS):
+        # X-Forwarded-For can contain multiple IPs: client, proxy1, proxy2...
+        first_hop = forwarded_for.split(",", 1)[0].strip()
+        if first_hop:
+            return first_hop
+
+    return client_host
+
+limiter = Limiter(key_func=_rate_limit_key)
 
 app = FastAPI(
     title="Dermalyze Inference API",
@@ -181,7 +199,19 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials | None = Depends(
                         options={"verify_aud": False}
                     )
                 else:
-                    raise
+                    error_text = str(jwks_error).lower()
+                    service_unavailable_markers = (
+                        "connection", "network", "timeout", "timed out", "dns", "jwks"
+                    )
+                    if any(marker in error_text for marker in service_unavailable_markers):
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Authentication service is temporarily unavailable. Please try again.",
+                        )
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Invalid authentication token.",
+                    )
         # Legacy HS256 verification (when SUPABASE_URL not set)
         elif SUPABASE_JWT_SECRET:
             payload = jwt.decode(
@@ -204,6 +234,8 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials | None = Depends(
             )
 
         return payload
+    except HTTPException:
+        raise
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=401,
@@ -214,6 +246,12 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials | None = Depends(
         raise HTTPException(
             status_code=401,
             detail="Invalid authentication token.",
+        )
+    except Exception as e:
+        logger.exception("Unexpected JWT verification error: %s", str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service is temporarily unavailable. Please try again.",
         )
 
 
@@ -386,10 +424,13 @@ async def classify_image(
     file: UploadFile = File(...),
     user: dict = Depends(verify_jwt_token)
 ) -> ClassifyResponse:
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+    declared_content_type = (file.content_type or "application/octet-stream").lower()
+    normalized_content_type = "image/jpeg" if declared_content_type == "image/jpg" else declared_content_type
+
+    if normalized_content_type not in ("image/jpeg", "image/png", "image/webp"):
         raise HTTPException(
             status_code=415,
-            detail=f"Unsupported media type '{file.content_type}'. Send JPEG, PNG, or WebP.",
+            detail=f"Unsupported media type '{declared_content_type}'. Send JPEG, PNG, or WebP.",
         )
 
     image_bytes = await file.read()
@@ -397,10 +438,10 @@ async def classify_image(
         raise HTTPException(status_code=413, detail="Image exceeds 10 MB limit.")
 
     # Validate file magic bytes match declared content type
-    _validate_magic_bytes(image_bytes, file.content_type or "application/octet-stream")
+    _validate_magic_bytes(image_bytes, normalized_content_type)
 
     await _validate_dermatoscopic(
-        image_bytes, mime_type=file.content_type or "image/jpeg"
+        image_bytes, mime_type=normalized_content_type
     )
 
     try:

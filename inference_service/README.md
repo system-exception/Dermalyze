@@ -61,7 +61,7 @@ API docs: **http://localhost:8000/docs**
 - Content type: `multipart/form-data`
 - File field name: `file`
 - Accepted image types: JPEG, PNG, WebP
-- Max upload size: 20 MB
+- Max upload size: 10 MB
 
 Response:
 
