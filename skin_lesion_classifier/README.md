@@ -1,6 +1,6 @@
 # Dermalyze Training Pipeline
 
-ML training and evaluation pipeline for skin lesion classification using EfficientNet-B0 and ConvNeXt-Tiny on HAM10000 dataset.
+ML training and evaluation pipeline for skin lesion classification using EfficientNet, ResNeSt, and ConvNeXt architectures on the HAM10000 dataset.
 
 > ⚠️ **DISCLAIMER**: Educational/research purposes only. Not for medical diagnosis. Consult healthcare professionals for medical advice.
 
@@ -47,23 +47,19 @@ bash scripts/install_pytorch.sh
 # 2. Install remaining dependencies
 pip install -r requirements.txt
 
-# 3. Prepare data (download HAM10000 dataset first)
-python src/prepare_data.py --data-dir data/HAM10000
-
-# 3a. Prepare ISIC-style metadata datasets (isic_id + diagnosis_3)
+# 3. Prepare HAM10000 data (download HAM10000 dataset first)
+# Training set (with metadata)
 python src/prepare_data.py \
-    --data-dir data/isic2018 \
-    --use-default-isic-mapping
+    --data-dir data/HAM10000_Training \
+    --include-metadata
 
-# Optional: provide your own JSON mapping for diagnosis labels -> HAM classes
+# Validation set
 python src/prepare_data.py \
-    --data-dir data/dataset \
-    --label-mapping-file path/to/label_mapping.json
+    --data-dir data/HAM10000_Val
 
-# 3b. (Optional) Build class-balanced augmented dataset (21,000 images)
+# Test set
 python src/prepare_data.py \
-    --data-dir data/HAM10000 \
-    --build-balanced-dataset
+    --data-dir data/HAM10000_Test
 
 # 4. Train
 python src/train.py --config config.yaml
@@ -72,7 +68,7 @@ python src/train.py --config config.yaml
 python src/evaluate.py \
     --checkpoint outputs/run_xxx/checkpoint_best.pt \
     --test-csv outputs/run_xxx/test_split.csv \
-    --images-dir data/HAM10000/images
+    --images-dir data/HAM10000_Training/images
 
 # 6. Predict
 python src/inference.py \
@@ -136,33 +132,24 @@ $env:TORCH_CHANNEL='cu130'  # or cu128 / cu126 / cpu
 
 Download [HAM10000](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DBW86T) and organize:
 ```
-data/HAM10000/
+data/HAM10000_Training/
 ├── images/
 │   └── *.jpg
-└── HAM10000_metadata.csv
+├── ground_truth.csv (one-hot encoded)
+└── metadata.csv (age_approx, sex, anatom_site_general)
+
+data/HAM10000_Val/
+├── images/
+│   └── *.jpg
+└── ground_truth.csv
+
+data/HAM10000_Test/
+├── images/
+│   └── *.jpg
+└── ground_truth.csv
 ```
 
-Balanced offline augmentation target (for `--build-balanced-dataset`):
-- `mel`: 3000
-- `nv`: 3000
-- `bcc`: 3000
-- `akiec`: 3000
-- `bkl`: 3000
-- `df`: 3000
-- `vasc`: 3000
-
-Default output:
-- images: `data/HAM10000/balanced_21k/images`
-- labels: `data/HAM10000/balanced_21k/labels.csv`
-
-To train on the balanced dataset, point config values to those paths:
-- `data.images_dir`
-- `data.labels_csv`
-
-ISIC-style metadata support:
-- `src/prepare_data.py` now accepts `isic_id` as image identifier and `diagnosis_3` as label source.
-- Use `--use-default-isic-mapping` to map common ISIC diagnosis names into HAM10000 classes (`akiec`, `bcc`, `bkl`, `df`, `mel`, `nv`, `vasc`).
-- Use `--label-mapping-file your_mapping.json` to override or extend mappings with a JSON dictionary of `{ "raw_label": "ham_class" }`.
+The `prepare_data.py` script will convert the one-hot encoded ground_truth.csv to single-label format and merge with metadata for the training set.
 
 ## Training
 
@@ -257,7 +244,7 @@ See `config.md` for a complete parameter reference, valid options, and defaults.
 python src/evaluate.py \
     --checkpoint outputs/run_xxx/checkpoint_best.pt \
     --test-csv outputs/run_xxx/test_split.csv \
-    --images-dir data/HAM10000/images
+    --images-dir data/HAM10000_Training/images
 ```
 Supports checkpoints trained with either backbone (`efficientnet_b0` / `convnext_tiny`) via `src/train.py`, including mixed-architecture ensembles.
 
@@ -280,7 +267,7 @@ Then run:
 python src/evaluate.py \
     --checkpoint outputs/run_xxx/checkpoint_best.pt \
     --test-csv outputs/run_xxx/test_split.csv \
-    --images-dir data/HAM10000/images
+    --images-dir data/HAM10000_Training/images
 ```
 
 CLI flags still override config for one-off runs (for example `--tta-mode full`).
@@ -290,7 +277,7 @@ CLI flags still override config for one-off runs (for example `--tta-mode full`)
 python src/evaluate.py \
     --checkpoint outputs/run_xxx/checkpoint_best.pt \
     --test-csv outputs/run_xxx/test_split.csv \
-    --images-dir data/HAM10000/images \
+    --images-dir data/HAM10000_Training/images \
     --use-tta --tta-mode medium
 ```
 *TTA modes: `light` (4 branches: original + flips), `medium` (8 branches: light + 90°/180°/270° rotations + center zoom-crop), `full` (12 branches: medium + 4 corner zoom-crops).*
@@ -303,7 +290,7 @@ python src/evaluate.py \
         outputs/model_2/checkpoint_best.pt \
         outputs/model_3/checkpoint_best.pt \
     --test-csv outputs/model_1/test_split.csv \
-    --images-dir data/HAM10000/images
+    --images-dir data/HAM10000_Training/images
 ```
 *Default uses `weighted_mean` aggregation with automatic weight computation from validation accuracy*
 
@@ -312,7 +299,7 @@ python src/evaluate.py \
 python src/evaluate.py \
     --checkpoint model1.pt model2.pt model3.pt \
     --test-csv test_split.csv \
-    --images-dir data/HAM10000/images \
+    --images-dir data/HAM10000_Training/images \
     --ensemble-weights 0.5 0.3 0.2
 ```
 
@@ -329,7 +316,7 @@ python src/evaluate.py \
         outputs/model_2/checkpoint_best.pt \
         outputs/model_3/checkpoint_best.pt \
     --test-csv outputs/model_1/test_split.csv \
-    --images-dir data/HAM10000/images \
+    --images-dir data/HAM10000_Training/images \
     --use-tta \
     --tta-mode medium \
     --ensemble-aggregation weighted_mean
@@ -388,13 +375,12 @@ python scripts/benchmark.py --num-batches 20
 
 ## Architecture
 
-- **Backbone**: EfficientNet-B0 (ImageNet pretrained)
-- **Classifier**: MLP (512→256→7) with BatchNorm & Dropout (0.35)
+- **Backbone**: EfficientNet (B0-B7), ResNeSt-101, SE-ResNeXt-101, or ConvNeXt-Tiny (ImageNet pretrained)
+- **Classifier**: MLP (512→256→7) with BatchNorm & Dropout (0.3)
 - **Loss**: Cross-Entropy / Focal / Label Smoothing with class weights
-- **Optimizer**: AdamW (lr=0.0003, weight_decay=0.02)
+- **Optimizer**: AdamW (lr=0.00025, weight_decay=0.02)
 - **Scheduler**: Cosine annealing with warm restarts (T_0=20)
 - **Augmentation**: Flip, rotate, color jitter, blur, affine, cutout
-- **Anti-leakage**: Lesion-aware splitting (`lesion_id` grouping)
 - **Class imbalance**: Weighted sampling + class-weighted loss
 
 ## Ensemble Weighting
@@ -409,11 +395,11 @@ When using `--ensemble-aggregation weighted_mean` without `--ensemble-weights`:
 
 | Metric | Score |
 |--------|-------|
-| Accuracy | 80-85% |
-| Macro F1 | 70-75% |
-| ROC-AUC (macro) | 90-95% |
+| Accuracy | 75-85% |
+| Macro F1 | 65-75% |
+| ROC-AUC (macro) | 85-95% |
 
-*Note: Class-specific performance varies due to data imbalance (e.g., nv~6700 images, df~115 images)*
+*Note: Class-specific performance varies due to data imbalance in HAM10000 dataset*
 
 ## Ethical Considerations
 

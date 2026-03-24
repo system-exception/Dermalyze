@@ -69,59 +69,56 @@ VITE_SUPABASE_ANON_KEY=your_supabase_key
 
 ## Data Preparation
 
-The `prepare_data.py` script handles multiple skin lesion datasets (ISIC 2019, ISIC 2018, HAM10000, etc.) with automatic metadata extraction and label conversion.
+The `prepare_data.py` script handles the HAM10000 dataset with automatic one-hot to single-label conversion and metadata extraction.
 
-### Quick Start: Prepare ISIC 2019 Data
+### HAM10000 Dataset Structure
+
+```
+data/HAM10000_Training/
+    images/
+        ISIC_0024306.jpg
+        ...
+    ground_truth.csv  (one-hot encoded: MEL, NV, BCC, AKIEC, BKL, DF, VASC)
+    metadata.csv      (contains age_approx, sex, anatom_site_general)
+
+data/HAM10000_Val/
+    images/
+    ground_truth.csv
+
+data/HAM10000_Test/
+    images/
+    ground_truth.csv
+```
+
+### Quick Start: Prepare HAM10000 Data
 
 ```bash
+# Training set (with metadata)
 python skin_lesion_classifier/src/prepare_data.py \
-  --data-dir data/ISIC2019Training \
-  --metadata-columns age_approx sex anatom_site \
-  --skip-validation
+  --data-dir data/HAM10000_Training \
+  --include-metadata
+
+# Validation set
+python skin_lesion_classifier/src/prepare_data.py \
+  --data-dir data/HAM10000_Val
+
+# Test set
+python skin_lesion_classifier/src/prepare_data.py \
+  --data-dir data/HAM10000_Test
 ```
 
-**Output**: `data/ISIC2019Training/labels_with_metadata.csv`
-```
-image_id,label,lesion_id,age_approx,sex,anatom_site
-ISIC_0000000,nv,,55.0,female,anterior torso
-ISIC_0000001,nv,,30.0,female,anterior torso
-```
+**Outputs**:
+- `HAM10000_Training/labels_with_metadata.csv` (includes age_approx, sex, anatom_site)
+- `HAM10000_Val/labels.csv` (image_id and label only)
+- `HAM10000_Test/labels.csv` (image_id and label only)
 
 ### Key Features
 
-- ✅ **Multiple Datasets**: HAM10000, ISIC 2019, ISIC 2018, custom datasets
-- ✅ **Metadata Extraction**: Auto-extracts age_approx, sex, anatomic_site
-- ✅ **Smart Column Mapping**: Handles naming variations across datasets
-- ✅ **One-Hot Label Conversion**: Converts ISIC one-hot encoded to single labels
-- ✅ **Balanced Augmentation**: Creates 19K balanced dataset with metadata preservation
-- ✅ **Multi-Dataset Support**: Works with separate labels/metadata files
-
-### Dataset Support
-
-| Dataset | Labels | Metadata | Format | Status |
-|---------|--------|----------|--------|--------|
-| ISIC 2019 Training | ✅ | ✅ | One-hot | ✅ Full support |
-| ISIC 2019 Test | ✅ | ✅ | One-hot | ✅ Full support |
-| ISIC 2018 Val | ✅ | ✅ | One-hot | ✅ Full support |
-| HAM10000 | ✅ | ✅ | Single-label | ✅ Full support |
-| balanced_21k | ✅ | ❌ | Single-label | ✅ Labels only |
-| braaff-bald | ✅ | ✅ | Single-label | ✅ Full support |
-
-### Create Balanced Dataset with Metadata
-
-```bash
-python skin_lesion_classifier/src/prepare_data.py \
-  --data-dir data/ISIC2019Training \
-  --metadata-columns age_approx sex anatom_site \
-  --build-balanced-dataset \
-  --balanced-output-dir data/balanced_21k \
-  --balanced-output-csv data/balanced_21k/labels_with_metadata.csv
-```
-
-Creates balanced training data (21,000 images) with:
-- **Metadata preservation**: age_approx, sex, anatom_site preserved through augmentation
-- **Class distribution**: mel=3000, nv=3000, bcc=3000, akiec=3000, bkl=3000, df=3000, vasc=3000
-- **Augmented images**: New variations retain source metadata
+- ✅ **HAM10000 Support**: One-hot encoded ground_truth.csv conversion
+- ✅ **Metadata Extraction**: Auto-extracts age_approx, sex, anatom_site from metadata.csv
+- ✅ **Smart Column Mapping**: Handles naming variations (anatom_site_general → anatom_site)
+- ✅ **Image Validation**: Validates image format and readability
+- ✅ **Dataset Statistics**: Displays class distribution and metadata coverage
 
 ## Workflow
 
