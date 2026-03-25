@@ -176,6 +176,21 @@ def resolve_backbone_factories(backbone: str) -> Tuple[Any, Any, str, str]:
 
         return create_model_b7, get_loss_function, "efficientnet_b7", "EfficientNet-B7"
 
+    if normalized in {"efficientnetv2_s", "efficientnet_v2_s", "efficientnet-v2-s"}:
+        from src.models.efficientnetv2_s import create_model_v2s, get_loss_function
+
+        return create_model_v2s, get_loss_function, "efficientnetv2_s", "EfficientNetV2-S"
+
+    if normalized in {"efficientnetv2_m", "efficientnet_v2_m", "efficientnet-v2-m"}:
+        from src.models.efficientnetv2_m import create_model_v2m, get_loss_function
+
+        return create_model_v2m, get_loss_function, "efficientnetv2_m", "EfficientNetV2-M"
+
+    if normalized in {"efficientnetv2_l", "efficientnet_v2_l", "efficientnet-v2-l"}:
+        from src.models.efficientnetv2_l import create_model_v2l, get_loss_function
+
+        return create_model_v2l, get_loss_function, "efficientnetv2_l", "EfficientNetV2-L"
+
     if normalized in {"convnext", "convnext_tiny", "convnext-tiny"}:
         from src.models.convnext import create_model, get_loss_function
 
@@ -194,8 +209,8 @@ def resolve_backbone_factories(backbone: str) -> Tuple[Any, Any, str, str]:
     raise ValueError(
         "Unsupported model.backbone=%r. Supported values: efficientnet_b0, "
         "efficientnet_b1, efficientnet_b2, efficientnet_b3, efficientnet_b4, "
-        "efficientnet_b5, efficientnet_b6, efficientnet_b7, "
-        "convnext_tiny, resnest_101, seresnext_101." % backbone
+        "efficientnet_b5, efficientnet_b6, efficientnet_b7, efficientnetv2_s, "
+        "efficientnetv2_m, efficientnetv2_l, convnext_tiny, resnest_101, seresnext_101." % backbone
     )
 
 

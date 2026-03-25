@@ -36,6 +36,9 @@ from src.models.efficientnet_b4 import SkinLesionClassifierB4, create_model_b4
 from src.models.efficientnet_b5 import SkinLesionClassifierB5, create_model_b5
 from src.models.efficientnet_b6 import SkinLesionClassifierB6, create_model_b6
 from src.models.efficientnet_b7 import SkinLesionClassifierB7, create_model_b7
+from src.models.efficientnetv2_s import SkinLesionClassifierV2S, create_model_v2s
+from src.models.efficientnetv2_m import SkinLesionClassifierV2M, create_model_v2m
+from src.models.efficientnetv2_l import SkinLesionClassifierV2L, create_model_v2l
 from src.models.multi_input import create_multi_input_model
 from src.models.resnest_101 import SkinLesionResNeSt101Classifier, create_model_resnest101
 from src.models.seresnext_101 import SkinLesionSEResNeXt101Classifier, create_model_seresnext101
@@ -287,6 +290,9 @@ class SkinLesionPredictor:
             ("efficientnet_b5", SkinLesionClassifierB5, create_model_b5),
             ("efficientnet_b6", SkinLesionClassifierB6, create_model_b6),
             ("efficientnet_b7", SkinLesionClassifierB7, create_model_b7),
+            ("efficientnetv2_s", SkinLesionClassifierV2S, create_model_v2s),
+            ("efficientnetv2_m", SkinLesionClassifierV2M, create_model_v2m),
+            ("efficientnetv2_l", SkinLesionClassifierV2L, create_model_v2l),
             ("convnext_tiny", SkinLesionConvNeXtClassifier, create_convnext_tiny_model),
             ("resnest_101", SkinLesionResNeSt101Classifier, create_model_resnest101),
             ("seresnext_101", SkinLesionSEResNeXt101Classifier, create_model_seresnext101),
@@ -311,6 +317,15 @@ class SkinLesionPredictor:
             "efficientnet_b6": "efficientnet_b6",
             "efficientnet-b7": "efficientnet_b7",
             "efficientnet_b7": "efficientnet_b7",
+            "efficientnetv2_s": "efficientnetv2_s",
+            "efficientnet_v2_s": "efficientnetv2_s",
+            "efficientnet-v2-s": "efficientnetv2_s",
+            "efficientnetv2_m": "efficientnetv2_m",
+            "efficientnet_v2_m": "efficientnetv2_m",
+            "efficientnet-v2-m": "efficientnetv2_m",
+            "efficientnetv2_l": "efficientnetv2_l",
+            "efficientnet_v2_l": "efficientnetv2_l",
+            "efficientnet-v2-l": "efficientnetv2_l",
             "convnext": "convnext_tiny",
             "convnext-tiny": "convnext_tiny",
             "convnext_tiny": "convnext_tiny",
