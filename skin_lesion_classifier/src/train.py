@@ -644,9 +644,13 @@ def save_checkpoint(
         "metadata_encoder_state": metadata_encoder_state,
     }
 
+    # Ensure output directory exists
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+
     # Save latest checkpoint
     checkpoint_path = output_dir / "checkpoint_latest.pt"
-    torch.save(checkpoint, checkpoint_path)
+    torch.save(checkpoint, str(checkpoint_path))
 
     def _export_torchscript(best_model_state_dict: Dict[str, torch.Tensor]) -> None:
         """Export TorchScript model for inference portability."""
@@ -676,10 +680,10 @@ def save_checkpoint(
                     ema_state[name] = value.detach().clone()
             best_checkpoint = dict(checkpoint)
             best_checkpoint["model_state_dict"] = ema_state
-            torch.save(best_checkpoint, best_path)
+            torch.save(best_checkpoint, str(best_path))
             _export_torchscript(best_checkpoint["model_state_dict"])
         else:
-            torch.save(checkpoint, best_path)
+            torch.save(checkpoint, str(best_path))
             _export_torchscript(checkpoint["model_state_dict"])
         logger.info(f"Saved best model with val_loss: {metrics['val_loss']:.4f}")
 
@@ -689,7 +693,7 @@ def save_checkpoint(
     )
     if save_epoch_checkpoints:
         epoch_path = output_dir / f"checkpoint_epoch_{epoch}.pt"
-        torch.save(checkpoint, epoch_path)
+        torch.save(checkpoint, str(epoch_path))
 
 
 def load_checkpoint(
@@ -699,7 +703,7 @@ def load_checkpoint(
     scheduler: Optional[Any] = None,
 ) -> Tuple[int, Dict[str, float]]:
     """Load model checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(str(checkpoint_path), map_location="cpu", weights_only=False)
 
     model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -853,9 +857,9 @@ def train(
         )
 
     # Save split information
-    train_df.to_csv(output_dir / "train_split.csv", index=False)
-    val_df.to_csv(output_dir / "val_split.csv", index=False)
-    test_df.to_csv(output_dir / "test_split.csv", index=False)
+    train_df.to_csv(str(output_dir / "train_split.csv"), index=False)
+    val_df.to_csv(str(output_dir / "val_split.csv"), index=False)
+    test_df.to_csv(str(output_dir / "test_split.csv"), index=False)
 
     # Get training config
     train_config = config.get("training", {})
@@ -1120,7 +1124,7 @@ def train(
 
     if resume_from is not None and resume_from.exists():
         logger.info(f"Resuming from checkpoint: {resume_from}")
-        checkpoint = torch.load(resume_from, map_location="cpu", weights_only=False)
+        checkpoint = torch.load(str(resume_from), map_location="cpu", weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         start_epoch = checkpoint.get("epoch", -1) + 1
         prev_metrics = checkpoint.get("metrics", {})
@@ -1133,7 +1137,7 @@ def train(
         best_checkpoint_path = output_dir / "checkpoint_best.pt"
         if best_checkpoint_path.exists():
             logger.info("Found existing best checkpoint - loading its metrics")
-            best_checkpoint = torch.load(best_checkpoint_path, map_location="cpu", weights_only=False)
+            best_checkpoint = torch.load(str(best_checkpoint_path), map_location="cpu", weights_only=False)
             best_metrics = best_checkpoint.get("metrics", {})
             best_val_loss = best_metrics.get("val_loss", float("inf"))
             has_saved_best = True
@@ -1335,7 +1339,7 @@ def train(
     # Save training history
     import json
 
-    with open(output_dir / "training_history.json", "w") as f:
+    with open(str(output_dir / "training_history.json"), "w") as f:
         json.dump(history, f, indent=2)
 
     total_time = time.time() - start_time
@@ -1391,13 +1395,14 @@ def main() -> None:
         output_dir = args.output
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    assert output_dir.exists(), f"Failed to create output directory: {output_dir}"
 
     # Save config to output directory
-    with open(output_dir / "config.yaml", "w") as f:
+    with open(str(output_dir / "config.yaml"), "w") as f:
         yaml.dump(config, f, default_flow_style=False)
 
     # Set up file logging
-    file_handler = logging.FileHandler(output_dir / "training.log")
+    file_handler = logging.FileHandler(str(output_dir / "training.log"))
     file_handler.setFormatter(
         logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     )

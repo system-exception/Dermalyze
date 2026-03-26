@@ -116,6 +116,7 @@ def apply_ham10000_search_space(
     config: Dict[str, Any], trial: optuna.Trial
 ) -> Dict[str, Any]:
     model_cfg, train_cfg, loss_cfg, scheduler_cfg, ema_cfg = _ensure_sections(config)
+    data_cfg = config.setdefault("data", {})
 
     train_cfg["epochs"] = trial.suggest_int("epochs", 18, 36)
     train_cfg["batch_size"] = trial.suggest_categorical(
@@ -143,20 +144,34 @@ def apply_ham10000_search_space(
         "augmentation", ["light", "medium", "domain", "randaugment"]
     )
 
+    use_weighted_sampling = bool(train_cfg.get("use_weighted_sampling", True))
     train_cfg["sampling_weight_power"] = trial.suggest_float(
         "sampling_weight_power", 0.2, 0.8
     )
-    loss_cfg["class_weight_power"] = trial.suggest_float("class_weight_power", 0.2, 0.8)
+    if use_weighted_sampling:
+        # Keep loss class weights off when weighted sampling is active.
+        loss_cfg["class_weight_power"] = 0.0
+    else:
+        loss_cfg["class_weight_power"] = trial.suggest_float(
+            "class_weight_power", 0.2, 0.8
+        )
 
     loss_cfg["label_smoothing"] = trial.suggest_float("label_smoothing", 0.0, 0.08)
     loss_cfg["type"] = trial.suggest_categorical(
         "loss_type", ["focal", "cross_entropy", "label_smoothing"]
     )
 
-    train_cfg["mixup_alpha"] = trial.suggest_float("mixup_alpha", 0.0, 0.4)
-    train_cfg["cutmix_alpha"] = trial.suggest_float("cutmix_alpha", 0.0, 0.4)
-    train_cfg["mixup_prob"] = trial.suggest_float("mixup_prob", 0.1, 0.7)
-    train_cfg["cutmix_prob"] = trial.suggest_float("cutmix_prob", 0.1, 0.9)
+    use_metadata = bool(data_cfg.get("use_metadata", False))
+    if use_metadata:
+        train_cfg["mixup_alpha"] = 0.0
+        train_cfg["cutmix_alpha"] = 0.0
+        train_cfg["mixup_prob"] = 0.0
+        train_cfg["cutmix_prob"] = 0.0
+    else:
+        train_cfg["mixup_alpha"] = trial.suggest_float("mixup_alpha", 0.0, 0.4)
+        train_cfg["cutmix_alpha"] = trial.suggest_float("cutmix_alpha", 0.0, 0.4)
+        train_cfg["mixup_prob"] = trial.suggest_float("mixup_prob", 0.1, 0.7)
+        train_cfg["cutmix_prob"] = trial.suggest_float("cutmix_prob", 0.1, 0.9)
 
     train_cfg["early_stopping_patience"] = trial.suggest_int(
         "early_stopping_patience", 5, 12
