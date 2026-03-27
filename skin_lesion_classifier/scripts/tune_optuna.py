@@ -487,26 +487,55 @@ def main() -> None:
 
         return score
 
-    study.optimize(
-        objective,
-        n_trials=args.n_trials,
-        timeout=args.timeout,
-        show_progress_bar=bool(args.show_progress_bar),
-        catch=(
-            subprocess.CalledProcessError,
-            FileNotFoundError,
-            ValueError,
-            RuntimeError,
-        ),
-    )
-
+    interrupted = False
     try:
-        best = study.best_trial
-    except ValueError as exc:
-        raise RuntimeError(
-            "No successful Optuna trials were completed. "
-            "Check trial logs under output_root/trial_*/trial_train.log"
-        ) from exc
+        study.optimize(
+            objective,
+            n_trials=args.n_trials,
+            timeout=args.timeout,
+            show_progress_bar=bool(args.show_progress_bar),
+            catch=(
+                subprocess.CalledProcessError,
+                FileNotFoundError,
+                ValueError,
+                RuntimeError,
+            ),
+        )
+    except KeyboardInterrupt:
+        interrupted = True
+        print("\nInterrupted by user (Ctrl+C). Preserving study state and exiting cleanly...")
+
+    completed_trials = [
+        trial for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE
+    ]
+
+    if not completed_trials:
+        summary = {
+            "study_name": study.study_name,
+            "objective_metric": args.objective_metric,
+            "direction": direction,
+            "n_trials_requested": args.n_trials,
+            "n_trials_completed": len(study.trials),
+            "n_trials_successful": 0,
+            "interrupted": interrupted,
+            "best_trial_number": None,
+            "best_value": None,
+            "best_params": {},
+            "best_user_attrs": {},
+            "output_root": str(output_root),
+            "base_config": str(base_config_path),
+        }
+        with open(output_root / "optuna_summary.json", "w") as file:
+            json.dump(summary, file, indent=2)
+
+        print("\nNo successful Optuna trials were completed yet.")
+        print(f"Saved summary: {output_root / 'optuna_summary.json'}")
+        print(
+            "Resume with the same --study-name and --storage to continue from existing trials."
+        )
+        return
+
+    best = study.best_trial
     print("\n=== Best Trial ===")
     print(f"Trial #{best.number}")
     print(f"Objective value: {best.value}")
@@ -520,6 +549,8 @@ def main() -> None:
         "direction": direction,
         "n_trials_requested": args.n_trials,
         "n_trials_completed": len(study.trials),
+        "n_trials_successful": len(completed_trials),
+        "interrupted": interrupted,
         "best_trial_number": best.number,
         "best_value": best.value,
         "best_params": best.params,
