@@ -3,6 +3,7 @@
 
 # Data directories
 data/HAM10000_Training
+data/HAM10000_Segmentations
 data/HAM10000_Test
 data/HAM10000_Val
 data/braff-bald
