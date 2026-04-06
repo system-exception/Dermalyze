@@ -10,6 +10,7 @@ create table if not exists public.analyses (
   user_id             uuid not null references auth.users(id) on delete cascade,
   created_at          timestamptz not null default now(),
   image_url           text,
+  gradcam_image_url   text,                -- Grad-CAM explainability heatmap (nullable for backward compatibility)
   predicted_class_id  text not null,       -- e.g. "mel"
   predicted_class_name text not null,      -- e.g. "Melanoma"
   confidence          numeric(5,2) not null, -- e.g. 67.40
@@ -23,6 +24,9 @@ create index if not exists analyses_user_id_created_at_idx
 
 -- Migration: add notes column to existing databases (safe to re-run)
 alter table public.analyses add column if not exists notes text;
+
+-- Migration: add gradcam_image_url column for explainability heatmaps (safe to re-run)
+alter table public.analyses add column if not exists gradcam_image_url text;
 
 
 -- ── 2. Row Level Security ─────────────────────────────────────────────────────

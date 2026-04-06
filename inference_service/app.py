@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -277,6 +277,7 @@ class ClassResult(BaseModel):
 
 class ClassifyResponse(BaseModel):
     classes: List[ClassResult]
+    gradcam_image: Optional[str] = None  # Base64-encoded PNG heatmap overlay
 
 
 _predictor: SkinLesionPredictor | None = None
@@ -426,6 +427,7 @@ async def classify_image(
     sex: Optional[str] = Form(None),
     anatom_site: Optional[str] = Form(None),
     localization: Optional[str] = Form(None),
+    include_gradcam: bool = Query(False, description="Include Grad-CAM heatmap overlay"),
     user: dict = Depends(verify_jwt_token)
 ) -> ClassifyResponse:
     declared_content_type = (file.content_type or "application/octet-stream").lower()
@@ -474,18 +476,31 @@ async def classify_image(
                 aggregation=TTA_AGGREGATION,
                 include_disclaimer=False,
             )
+            # Generate Grad-CAM separately for TTA mode (uses base prediction)
+            gradcam_image = None
+            if include_gradcam:
+                gradcam_image = predictor.generate_gradcam(
+                    image=image_bytes,
+                    alpha=0.4,
+                    colormap="jet",
+                )
         else:
             prediction = predictor.predict(
                 image=image_bytes,
                 metadata=metadata_payload,
                 include_disclaimer=False,
+                include_gradcam=include_gradcam,
             )
+            gradcam_image = prediction.get("gradcam_image")
 
         probs = prediction.get("probabilities")
         if not isinstance(probs, dict):
             raise RuntimeError("Inference output did not include class probabilities.")
 
-        return ClassifyResponse(classes=_to_frontend_response(probs))
+        return ClassifyResponse(
+            classes=_to_frontend_response(probs),
+            gradcam_image=gradcam_image,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except ValueError as exc:

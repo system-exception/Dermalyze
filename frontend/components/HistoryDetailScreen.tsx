@@ -184,6 +184,7 @@ const HistoryDetailScreen: React.FC<HistoryDetailScreenProps> = ({ item, onBack 
           confidence={item.confidence}
           info={info}
           imageUrl={item.imageUrl}
+          gradcamImage={item.gradcamUrl ?? null}
         />
 
         {/* PROBABILITY CHART — only render when real scores are available */}

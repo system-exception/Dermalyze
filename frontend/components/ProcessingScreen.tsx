@@ -5,7 +5,7 @@ import type { ClassResult } from '../lib/types';
 
 interface ProcessingScreenProps {
   image: string | null;
-  onComplete: (results: ClassResult[]) => void;
+  onComplete: (results: ClassResult[], gradcamImage?: string) => void;
   onError: (message?: string, retryable?: boolean) => void;
 }
 
@@ -32,12 +32,12 @@ const ProcessingScreen: React.FC<ProcessingScreenProps> = ({
         await new Promise((r) => setTimeout(r, 400));
 
         setStatusText('Running model inference…');
-        const results = await classifyImage(image);
+        const result = await classifyImage(image);
 
         setStatusText('Finalising results…');
         await new Promise((r) => setTimeout(r, 300));
 
-        onComplete(results);
+        onComplete(result.classes, result.gradcamImage);
       } catch (err: unknown) {
         const msg =
           err instanceof Error
@@ -59,10 +59,10 @@ const ProcessingScreen: React.FC<ProcessingScreenProps> = ({
     <div className="flex-1 flex flex-col bg-slate-50">
       <main className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <div className="max-w-md w-full text-center">
-          <div className="bg-white rounded-3xl border border-slate-200 p-12 sm:p-16 shadow-sm flex flex-col items-center">
+          <div className="bg-white rounded-3xl border border-slate-300 p-12 sm:p-16 shadow-sm flex flex-col items-center">
 
             <div className="relative mb-10">
-              <div className="w-20 h-20 rounded-full border-4 border-slate-100" />
+              <div className="w-20 h-20 rounded-full border-4 border-slate-200" />
               <div className="absolute top-0 left-0 w-20 h-20 rounded-full border-4 border-teal-600 border-t-transparent animate-spin" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-10 h-10 bg-teal-50 rounded-full animate-pulse flex items-center justify-center">
@@ -83,7 +83,7 @@ const ProcessingScreen: React.FC<ProcessingScreenProps> = ({
 
             <div className="w-full space-y-3 opacity-40 pointer-events-none">
               <div className="w-full h-11 bg-slate-100 rounded-full" />
-              <div className="w-full h-11 border border-slate-200 rounded-full" />
+              <div className="w-full h-11 border border-slate-300 rounded-full" />
             </div>
           </div>
         </div>

@@ -12,6 +12,12 @@ export class ApiError extends Error {
 
 interface ClassifyResponse {
   classes: ClassResult[];
+  gradcam_image?: string | null;  // Base64-encoded PNG heatmap overlay
+}
+
+export interface ClassifyResult {
+  classes: ClassResult[];
+  gradcamImage?: string;  // Base64 data URL for display
 }
 
 const getApiBaseUrl = (): string => {
@@ -37,7 +43,10 @@ const assertValidResponse = (payload: unknown): ClassifyResponse => {
   return payload as ClassifyResponse;
 };
 
-export const classifyImage = async (imageDataUrl: string): Promise<ClassResult[]> => {
+export const classifyImage = async (
+  imageDataUrl: string,
+  includeGradcam: boolean = true
+): Promise<ClassifyResult> => {
   // Get current Supabase session and check expiry
   let { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -64,7 +73,11 @@ export const classifyImage = async (imageDataUrl: string): Promise<ClassResult[]
   const formData = new FormData();
   formData.append('file', imageBlob, `lesion.${imageExt}`);
 
-  const response = await fetch(`${API_BASE_URL}/classify`, {
+  // Add include_gradcam query parameter
+  const url = new URL(`${API_BASE_URL}/classify`, window.location.origin);
+  url.searchParams.set('include_gradcam', includeGradcam.toString());
+
+  const response = await fetch(url.toString(), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
@@ -83,6 +96,15 @@ export const classifyImage = async (imageDataUrl: string): Promise<ClassResult[]
   }
 
   const parsed = assertValidResponse(json);
+  const sortedClasses = [...parsed.classes].sort((a, b) => b.score - a.score);
 
-  return [...parsed.classes].sort((a, b) => b.score - a.score);
+  // Convert base64 to data URL if gradcam_image is present
+  const gradcamImage = parsed.gradcam_image
+    ? `data:image/png;base64,${parsed.gradcam_image}`
+    : undefined;
+
+  return {
+    classes: sortedClasses,
+    gradcamImage,
+  };
 };

@@ -121,7 +121,7 @@ export const DataCacheProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         supabase.rpc('get_dashboard_stats'),
         supabase
           .from('analyses')
-          .select('predicted_class_id, predicted_class_name, confidence, created_at, image_url')
+          .select('predicted_class_id, predicted_class_name, confidence, created_at, image_url, gradcam_image_url')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1),
@@ -221,7 +221,7 @@ export const DataCacheProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       const { data, error } = await supabase
         .from('analyses')
-        .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, all_scores, notes')
+        .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, gradcam_image_url, all_scores, notes')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .range(0, PAGE_SIZE - 1);
@@ -230,16 +230,22 @@ export const DataCacheProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const rows = data ?? [];
 
-      // Map rows with image processing
-      const paths = rows
+      // Map rows with image processing (both original and gradcam)
+      const imagePaths = rows
         .map((row) => row.image_url as string | null)
         .filter((p): p is string => !!p && !p.startsWith('http'));
 
+      const gradcamPaths = rows
+        .map((row) => row.gradcam_image_url as string | null)
+        .filter((p): p is string => !!p && !p.startsWith('http'));
+
+      const allPaths = [...imagePaths, ...gradcamPaths];
+
       let imageUrlMap: Record<string, string> = {};
-      if (paths.length > 0) {
+      if (allPaths.length > 0) {
         const { data: signed } = await supabase.storage
           .from('analysis-images')
-          .createSignedUrls(paths, 60 * 60);
+          .createSignedUrls(allPaths, 60 * 60);
 
         if (signed) {
           await Promise.all(
@@ -268,7 +274,11 @@ export const DataCacheProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const mappedRows: AnalysisHistoryItem[] = rows.map((row) => {
         const rawUrl = row.image_url as string | null;
+        const rawGradcamUrl = row.gradcam_image_url as string | null;
+
         const imageUrl = rawUrl && !rawUrl.startsWith('http') ? imageUrlMap[rawUrl] : rawUrl;
+        const gradcamUrl = rawGradcamUrl && !rawGradcamUrl.startsWith('http') ? imageUrlMap[rawGradcamUrl] : rawGradcamUrl;
+
         return {
           id: row.id,
           createdAt: row.created_at,
@@ -286,6 +296,8 @@ export const DataCacheProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           confidence: row.confidence,
           imageUrl,
           imagePath: (rawUrl && !rawUrl.startsWith('http')) ? rawUrl : undefined,
+          gradcamUrl,
+          gradcamPath: (rawGradcamUrl && !rawGradcamUrl.startsWith('http')) ? rawGradcamUrl : undefined,
           allScores: (row.all_scores as AnalysisHistoryItem['allScores']) ?? undefined,
           notes: (row.notes as string | null) ?? undefined,
         };

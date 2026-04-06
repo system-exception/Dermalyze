@@ -14,6 +14,7 @@ import type { ClassResult } from '../lib/types';
 interface ResultsScreenProps {
   image: string | null;
   results: ClassResult[] | null;
+  gradcamImage?: string | null;
   caseId: string;
   onAnalyzeAnother: () => void;
   onNavigateToHistory: () => void;
@@ -61,6 +62,7 @@ interface ResultsScreenProps {
 const ResultsScreen: React.FC<ResultsScreenProps> = ({
   image,
   results,
+  gradcamImage,
   caseId,
   onAnalyzeAnother,
   onNavigateToHistory,
@@ -130,6 +132,8 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
         // Step 2: Encrypt with user-specific key (admin cannot view images)
         // Store the path (not a public URL) so signed URLs can be generated at display time
         let image_url: string | null = null;
+        let gradcam_image_url: string | null = null;
+
         if (image) {
           // Convert to WebP with 75% quality (1024px max dimension)
           const optimizedBlob = await optimizeImage(image, {
@@ -151,12 +155,41 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
           }
         }
 
+        // Upload Grad-CAM heatmap if available
+        if (gradcamImage) {
+          try {
+            // Optimize Grad-CAM image (same settings as original)
+            const optimizedGradcamBlob = await optimizeImage(gradcamImage, {
+              maxDimension: 1024,
+              quality: 0.75,
+              format: 'image/webp'
+            });
+
+            // Encrypt the Grad-CAM image
+            const encryptedGradcamBlob = await encryptImage(optimizedGradcamBlob, user.id);
+
+            const ext = getEncryptedExtension();
+            const gradcamPath = `${user.id}/${caseId}_gradcam.${ext}`;
+            const { error: gradcamUploadErr } = await supabase.storage
+              .from('analysis-images')
+              .upload(gradcamPath, encryptedGradcamBlob, { contentType: 'application/octet-stream' });
+
+            if (!gradcamUploadErr) {
+              gradcam_image_url = gradcamPath;
+            }
+          } catch (err) {
+            // Non-blocking — if Grad-CAM upload fails, still save the analysis
+            console.error('Failed to upload Grad-CAM image:', err);
+          }
+        }
+
         // Insert analysis record — id is the client-generated UUID so the
         // displayed Case ID always matches what is stored in the database.
         const { error: insertErr } = await supabase.from('analyses').insert({
           id: caseId,
           user_id: user.id,
           image_url,
+          gradcam_image_url,
           predicted_class_id: predictedClass.id,
           predicted_class_name: predictedClass.name,
           confidence: predictedClass.score,
@@ -290,6 +323,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
           confidence={predictedClass.score}
           info={info}
           imageUrl={image}
+          gradcamImage={gradcamImage}
         />
 
         {/* PROBABILITY CHART — full width */}
@@ -300,7 +334,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
 
         {/* CLINICIAN NOTES */}
         {!saveFailed && (
-          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <section className="bg-white rounded-xl border border-slate-400 shadow-sm p-5">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Clinician Notes</p>
             <textarea
               value={noteText}
@@ -308,7 +342,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
               rows={3}
               maxLength={2000}
               placeholder="Add clinical observations, follow-up plans, or patient notes…"
-              className="w-full text-sm text-slate-700 border border-slate-200 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent placeholder:text-slate-300"
+              className="w-full text-sm text-slate-700 border border-slate-300 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent placeholder:text-slate-300"
             />
             {noteError && (
               <p className="text-xs text-red-500 font-medium mt-1">{noteError}</p>
