@@ -98,7 +98,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
     const targetUserId = uid ?? userId ?? '';
     let query = supabase
       .from('analyses')
-      .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, all_scores, notes')
+      .select('id, created_at, predicted_class_id, predicted_class_name, confidence, image_url, gradcam_image_url, all_scores, notes')
       .eq('user_id', targetUserId);
 
     // Time period filter
@@ -203,15 +203,22 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
   };
 
   const mapRows = async (data: Record<string, unknown>[], userId: string): Promise<AnalysisHistoryItem[]> => {
-    const paths = data
+    // Collect all image paths (both original and gradcam)
+    const imagePaths = data
       .map((row) => row.image_url as string | null)
       .filter((p): p is string => !!p && !p.startsWith('http'));
 
+    const gradcamPaths = data
+      .map((row) => row.gradcam_image_url as string | null)
+      .filter((p): p is string => !!p && !p.startsWith('http'));
+
+    const allPaths = [...imagePaths, ...gradcamPaths];
+
     let imageUrlMap: Record<string, string> = {};
-    if (paths.length > 0) {
+    if (allPaths.length > 0) {
       const { data: signed } = await supabase.storage
         .from('analysis-images')
-        .createSignedUrls(paths, 60 * 60); // 1-hour expiry
+        .createSignedUrls(allPaths, 60 * 60); // 1-hour expiry
 
       if (signed) {
         // Fetch and decrypt encrypted images (or use signed URLs for old unencrypted images)
@@ -249,9 +256,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
 
     return data.map((row) => {
       const rawUrl = row.image_url as string | null;
-      const imageUrl = rawUrl
-        ? (rawUrl.startsWith('http') ? rawUrl : (imageUrlMap[rawUrl] ?? undefined))
-        : undefined;
+      const rawGradcamUrl = row.gradcam_image_url as string | null;
+
+      const imageUrl = rawUrl && !rawUrl.startsWith('http') ? imageUrlMap[rawUrl] : rawUrl;
+      const gradcamUrl = rawGradcamUrl && !rawGradcamUrl.startsWith('http') ? imageUrlMap[rawGradcamUrl] : rawGradcamUrl;
+
       return {
         id: row.id as string,
         createdAt: row.created_at as string,
@@ -266,6 +275,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onViewDetails }) 
         confidence: row.confidence as number,
         imageUrl,
         imagePath: (rawUrl && !rawUrl.startsWith('http')) ? rawUrl : undefined,
+        gradcamUrl,
+        gradcamPath: (rawGradcamUrl && !rawGradcamUrl.startsWith('http')) ? rawGradcamUrl : undefined,
         allScores: (row.all_scores as AnalysisHistoryItem['allScores']) ?? undefined,
         notes: (row.notes as string | null) ?? undefined,
       };

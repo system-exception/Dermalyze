@@ -30,7 +30,7 @@ const MedicalInfoCard: React.FC<MedicalInfoCardProps> = ({ info }) => {
   ];
 
   return (
-    <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+    <section className="bg-white rounded-xl border border-slate-300 shadow-sm p-5">
       <h3 className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-5">
         Condition Information
       </h3>

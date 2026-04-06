@@ -112,7 +112,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({
     <div className="flex-1 flex flex-col bg-slate-50">
       <main className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <div className="max-w-xl w-full">
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 shadow-sm">
+          <div className="bg-white rounded-3xl border border-slate-300 p-8 sm:p-12 shadow-sm">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-slate-900 mb-2 tracking-tight">
                 Upload Image for Analysis
@@ -124,7 +124,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({
 
             <div 
               className={`relative border-2 border-dashed rounded-2xl transition-all duration-200 flex flex-col items-center justify-center min-h-[300px] p-6 text-center
-                ${selectedImage ? 'border-teal-500 bg-teal-50/10' : 'border-slate-200 hover:border-teal-400 hover:bg-slate-50/50'}
+                ${selectedImage ? 'border-teal-500 bg-teal-50/10' : 'border-slate-300 hover:border-teal-400 hover:bg-slate-50/50'}
                 ${isDragging ? 'border-teal-500 bg-teal-50 ring-4 ring-teal-500/10' : ''}
                 ${!selectedImage ? 'cursor-pointer' : ''}`}
               onDragOver={handleDragOver}
@@ -162,7 +162,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({
                     />
                     <button 
                       onClick={clearSelection}
-                      className="absolute -top-3 -right-3 bg-white text-slate-400 hover:text-red-500 rounded-full p-1.5 shadow-lg border border-slate-100 transition-colors"
+                      className="absolute -top-3 -right-3 bg-white text-slate-400 hover:text-red-500 rounded-full p-1.5 shadow-lg border border-slate-200 transition-colors"
                       title="Remove image"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

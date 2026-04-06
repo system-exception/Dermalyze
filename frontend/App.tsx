@@ -75,6 +75,7 @@ const App: React.FC = () => {
 
   const [selectedImage,       setSelectedImage]       = useState<string | null>(null);
   const [analysisResults,     setAnalysisResults]     = useState<ClassResult[] | null>(null);
+  const [analysisGradcam,     setAnalysisGradcam]     = useState<string | null>(null);
   const [analysisCaseId,      setAnalysisCaseId]      = useState<string | null>(null);
   const [analysisError,       setAnalysisError]       = useState<string | null>(null);
   const [analysisRetryable,   setAnalysisRetryable]   = useState(false);
@@ -186,6 +187,7 @@ const App: React.FC = () => {
   const resetAnalysis = () => {
     setSelectedImage(null);
     setAnalysisResults(null);
+    setAnalysisGradcam(null);
     setAnalysisCaseId(null);
     setAnalysisError(null);
     setAnalysisRetryable(false);
@@ -271,10 +273,11 @@ const App: React.FC = () => {
               <AppLayout onLogout={handleRequestLogout}>
                 <ProcessingScreen
                   image={selectedImage}
-                  onComplete={(results) => {
+                  onComplete={(results, gradcamImage) => {
                     const caseId = crypto.randomUUID();
                     setAnalysisCaseId(caseId);
                     setAnalysisResults(results);
+                    setAnalysisGradcam(gradcamImage ?? null);
                     navigate(ROUTES.results);
                   }}
                   onError={(msg, retryable) => { setAnalysisError(msg ?? null); setAnalysisRetryable(retryable ?? false); navigate(ROUTES.error); }}
@@ -288,6 +291,7 @@ const App: React.FC = () => {
                 <ResultsScreen
                   image={selectedImage}
                   results={analysisResults}
+                  gradcamImage={analysisGradcam}
                   caseId={analysisCaseId}
                   onAnalyzeAnother={resetAnalysis}
                   onNavigateToHistory={() => navigate(ROUTES.history)}

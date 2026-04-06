@@ -223,7 +223,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
         </div>
 
         {/* ── Section 1: Profile Info ── */}
-        <section className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+        <section className="bg-white rounded-3xl border border-slate-300 p-6 sm:p-8 shadow-sm">
           <div className="flex items-center gap-4 mb-6">
             {/* Initials avatar */}
             <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xl shrink-0 select-none">
@@ -272,7 +272,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
         </section>
 
         {/* ── Section 2: Change Password ── */}
-        <section className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+        <section className="bg-white rounded-3xl border border-slate-300 p-6 sm:p-8 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900 mb-1">Change Password</h2>
           <p className="text-sm text-slate-500 mb-6">Update your account password. New password must be at least 12 characters.</p>
 
@@ -321,7 +321,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
         </section>
 
         {/* ── Section 3: Delete Account ── */}
-        <section className="bg-white rounded-3xl border border-red-100 p-6 sm:p-8 shadow-sm">
+        <section className="bg-white rounded-3xl border border-red-300 p-6 sm:p-8 shadow-sm">
           <h2 className="text-lg font-bold text-red-700 mb-1">Delete Account</h2>
           <p className="text-sm text-slate-500 mb-4 leading-relaxed">
             Permanently delete your account and all associated analysis data.
@@ -338,7 +338,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
           ) : (
             <div className="space-y-4">
               <FeedbackBanner msg={deleteMsg} />
-              <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                 <p className="text-sm text-red-700 mb-3 font-medium">
                   Type <span className="font-mono font-bold">DELETE</span> to confirm:
                 </p>
