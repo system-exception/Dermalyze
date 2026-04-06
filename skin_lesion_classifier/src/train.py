@@ -981,9 +981,13 @@ def train(
     mixup_alpha = float(train_config.get("mixup_alpha", 0.0) or 0.0)
     cutmix_alpha = float(train_config.get("cutmix_alpha", 0.0) or 0.0)
     mixup_prob = float(train_config.get("mixup_prob", 0.0) or 0.0)
-    cutmix_prob = float(train_config.get("cutmix_prob", 0.5) or 0.5)
+    cutmix_prob_cfg = train_config.get("cutmix_prob", 0.5)
+    cutmix_prob = float(0.5 if cutmix_prob_cfg is None else cutmix_prob_cfg)
+    sampling_weight_power_cfg = train_config.get("sampling_weight_power", 1.0)
     weighted_sampling_power = float(
-        train_config.get("sampling_weight_power", 1.0) or 1.0
+        1.0
+        if sampling_weight_power_cfg is None
+        else sampling_weight_power_cfg
     )
     gradient_accumulation_steps = int(
         train_config.get("gradient_accumulation_steps", 1) or 1
@@ -1078,7 +1082,10 @@ def train(
     loss_config = config.get("loss", {})
 
     # Calculate class weights for loss function
-    class_weight_power = float(loss_config.get("class_weight_power", 1.0) or 1.0)
+    class_weight_power_cfg = loss_config.get("class_weight_power", 1.0)
+    class_weight_power = float(
+        1.0 if class_weight_power_cfg is None else class_weight_power_cfg
+    )
     class_weights = get_class_weights_for_loss(train_df, power=class_weight_power)
     class_weights = class_weights.to(device)
     logger.info(f"Class weights: {class_weights.tolist()}")
