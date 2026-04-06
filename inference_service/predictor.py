@@ -26,6 +26,7 @@ try:
     from .models.efficientnet import SkinLesionClassifier, normalize_efficientnet_variant
     from .models.multi_input import MultiInputClassifier
     from .tta_constants import TTA_AUG_COUNTS
+    from .gradcam import GradCAM, get_target_layer, heatmap_to_base64
 except ImportError:
     from metadata import (
         CLASS_LABELS,
@@ -39,6 +40,7 @@ except ImportError:
     from models.efficientnet import SkinLesionClassifier, normalize_efficientnet_variant
     from models.multi_input import MultiInputClassifier
     from tta_constants import TTA_AUG_COUNTS
+    from gradcam import GradCAM, get_target_layer, heatmap_to_base64
 
 try:
     import cv2
@@ -295,24 +297,123 @@ class SkinLesionPredictor:
             image = Image.open(io.BytesIO(image)).convert("RGB")
         return preprocess_image(image, self.image_size).to(self.device)
 
-    @torch.no_grad()
+    def _to_pil_image(
+        self, image: Union[str, Path, Image.Image, np.ndarray, bytes]
+    ) -> Image.Image:
+        """Convert various image inputs to PIL Image."""
+        if isinstance(image, bytes):
+            return Image.open(io.BytesIO(image)).convert("RGB")
+        elif isinstance(image, (str, Path)):
+            return Image.open(image).convert("RGB")
+        elif isinstance(image, np.ndarray):
+            return Image.fromarray(image).convert("RGB")
+        elif isinstance(image, Image.Image):
+            return image.convert("RGB")
+        else:
+            raise TypeError(f"Unsupported image type: {type(image)}")
+
+    def generate_gradcam(
+        self,
+        image: Union[str, Path, Image.Image, np.ndarray, bytes],
+        target_class: Optional[int] = None,
+        alpha: float = 0.4,
+        colormap: str = "jet",
+    ) -> str:
+        """Generate Grad-CAM heatmap overlay as base64 string.
+
+        Args:
+            image: Input image in any supported format
+            target_class: Class index to generate CAM for (None = predicted class)
+            alpha: Heatmap overlay opacity (0-1)
+            colormap: Colormap to use ('jet', 'turbo', 'grayscale')
+
+        Returns:
+            Base64-encoded PNG image of heatmap overlay
+        """
+        # Get PIL image for overlay
+        pil_image = self._to_pil_image(image)
+
+        # Preprocess for model
+        tensor = self.preprocess(image)
+
+        # Get target layer and create GradCAM
+        target_layer = get_target_layer(self.model)
+        gradcam = GradCAM(self.model, target_layer)
+
+        try:
+            # Generate heatmap
+            heatmap = gradcam.generate(tensor, target_class)
+
+            # Create overlay and encode as base64
+            gradcam_base64 = heatmap_to_base64(
+                pil_image, heatmap, alpha=alpha, colormap=colormap
+            )
+            return gradcam_base64
+        finally:
+            # Always clean up hooks
+            gradcam.remove_hooks()
+
     def predict(
         self,
         image: Union[str, Path, Image.Image, np.ndarray, bytes],
         metadata: Optional[Dict[str, Any]] = None,
         top_k: int = 3,
         include_disclaimer: bool = True,
+        include_gradcam: bool = False,
+        gradcam_alpha: float = 0.4,
+        gradcam_colormap: str = "jet",
     ) -> Dict[str, Any]:
+        """Run inference on an image.
+
+        Args:
+            image: Input image in any supported format
+            metadata: Optional metadata dictionary for metadata-fusion models
+            top_k: Number of top predictions to return
+            include_disclaimer: Whether to include educational disclaimer
+            include_gradcam: Whether to generate Grad-CAM heatmap
+            gradcam_alpha: Heatmap overlay opacity (0-1)
+            gradcam_colormap: Colormap to use ('jet', 'turbo', 'grayscale')
+
+        Returns:
+            Dictionary with predictions and optionally gradcam_image
+        """
+        # Keep PIL image for gradcam if needed
+        pil_image = self._to_pil_image(image) if include_gradcam else None
+
         tensor = self.preprocess(image)
         metadata_tensor = self._prepare_metadata_tensor(metadata)
-        logits = self._forward_model(tensor, metadata_tensor)
-        probs = F.softmax(logits, dim=1)[0]
+
+        # For gradcam we need gradients, so use a separate path
+        if include_gradcam:
+            target_layer = get_target_layer(self.model)
+            gradcam = GradCAM(self.model, target_layer)
+            try:
+                # Forward pass with gradients enabled
+                tensor.requires_grad_(True)
+                logits = self._forward_model(tensor, metadata_tensor)
+                probs = F.softmax(logits, dim=1)[0]
+
+                probs_np = probs.detach().cpu().numpy()
+                predicted_idx = int(np.argmax(probs_np))
+
+                # Generate heatmap for predicted class
+                heatmap = gradcam.generate(tensor.detach().clone(), predicted_idx)
+                gradcam_base64 = heatmap_to_base64(
+                    pil_image, heatmap, alpha=gradcam_alpha, colormap=gradcam_colormap
+                )
+            finally:
+                gradcam.remove_hooks()
+        else:
+            with torch.no_grad():
+                logits = self._forward_model(tensor, metadata_tensor)
+                probs = F.softmax(logits, dim=1)[0]
+            probs_np = probs.cpu().numpy()
+            predicted_idx = int(np.argmax(probs_np))
+            gradcam_base64 = None
 
         if self.device.type == "mps":
             torch.mps.synchronize()
 
-        probs_np = probs.cpu().numpy()
-        predicted_idx = int(np.argmax(probs_np))
         predicted_class = IDX_TO_LABEL[predicted_idx]
 
         all_probs = {
@@ -337,6 +438,9 @@ class SkinLesionPredictor:
             "probabilities": all_probs,
             "top_k_predictions": top_k_predictions,
         }
+
+        if include_gradcam and gradcam_base64:
+            result["gradcam_image"] = gradcam_base64
 
         if include_disclaimer:
             result["disclaimer"] = self.DISCLAIMER

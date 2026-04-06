@@ -3,8 +3,8 @@ import React, { useEffect, useState } from 'react';
 import Button from './ui/Button';
 import { useDataCache } from '../lib/dataCache';
 import { getPredictionBreakdown } from '../lib/analyticsUtils';
-import type { AnalysisHistoryItem } from '../lib/types';
 import { supabase } from '../lib/supabase';
+import type { AnalysisHistoryItem } from '../lib/types';
 
 interface DashboardScreenProps {
   onNavigateToUpload: () => void;
@@ -64,25 +64,35 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const { dashboardStats, fetchDashboardStats, userName, userId } = useDataCache();
   const { data: stats, loading, error: fetchErr } = dashboardStats;
   const [timePeriod, setTimePeriod] = useState<'weekly' | 'monthly'>('weekly');
-  const [historyItems, setHistoryItems] = useState<AnalysisHistoryItem[]>([]);
+
+  // Analytics data - fetch ALL records (not just first page)
+  const [analyticsData, setAnalyticsData] = useState<AnalysisHistoryItem[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardStats();
   }, [fetchDashboardStats]);
 
-  // Fetch history items for time-series chart
+  // Fetch all analytics data for charts
   useEffect(() => {
-    const fetchHistory = async () => {
-      if (!userId) return;
+    const fetchAnalytics = async () => {
+      if (!userId) {
+        setAnalyticsLoading(false);
+        return;
+      }
+
+      setAnalyticsLoading(true);
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('analyses')
           .select('id, created_at, predicted_class_id, predicted_class_name, confidence')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
+        if (error) throw error;
+
         if (data) {
-          setHistoryItems(data.map((row) => ({
+          setAnalyticsData(data.map((row) => ({
             id: row.id,
             createdAt: row.created_at,
             date: '',
@@ -93,15 +103,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           })));
         }
       } catch (err) {
-        console.error('Failed to fetch history for chart:', err);
+        console.error('Failed to fetch analytics data:', err);
+        setAnalyticsData([]);
+      } finally {
+        setAnalyticsLoading(false);
       }
     };
 
-    fetchHistory();
+    fetchAnalytics();
   }, [userId]);
 
   // Get prediction breakdown data for the selected time period
-  const predictionBreakdownData = getPredictionBreakdown(historyItems, timePeriod);
+  const predictionBreakdownData = getPredictionBreakdown(analyticsData, timePeriod);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -270,7 +283,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </div>
             </div>
 
-            {predictionBreakdownData.length === 0 ? (
+            {analyticsLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-8 h-8 border-3 border-slate-200 border-t-teal-500 rounded-full animate-spin" />
+                  <span className="text-xs text-slate-400">Loading chart...</span>
+                </div>
+              </div>
+            ) : predictionBreakdownData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
                 No data yet.
               </div>

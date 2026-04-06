@@ -30,7 +30,7 @@ const ProbabilityChart: React.FC<ProbabilityChartProps> = ({ classes, predictedC
   const sorted = [...classes].sort((a, b) => b.score - a.score);
 
   return (
-    <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8">
+    <section className="bg-white rounded-xl border border-slate-300 shadow-sm p-6 md:p-8">
       <h3 className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-6">
         Prediction Confidence Distribution
       </h3>

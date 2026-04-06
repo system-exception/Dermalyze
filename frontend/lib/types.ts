@@ -14,6 +14,8 @@ export interface AnalysisHistoryItem {
   confidence: number;
   imageUrl?: string;
   imagePath?: string;
+  gradcamUrl?: string; // Grad-CAM explainability heatmap
+  gradcamPath?: string;
   allScores?: ClassResult[];
   notes?: string;
 }
