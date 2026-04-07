@@ -998,6 +998,22 @@ def train(
         if sampling_weight_power_cfg is None
         else sampling_weight_power_cfg
     )
+    sampling_weight_min_cfg = train_config.get("sampling_weight_min", None)
+    weighted_sampling_min_weight = (
+        None if sampling_weight_min_cfg is None else float(sampling_weight_min_cfg)
+    )
+    sampling_weight_max_cfg = train_config.get("sampling_weight_max", None)
+    weighted_sampling_max_weight = (
+        None if sampling_weight_max_cfg is None else float(sampling_weight_max_cfg)
+    )
+    if (
+        weighted_sampling_min_weight is not None
+        and weighted_sampling_max_weight is not None
+        and weighted_sampling_min_weight > weighted_sampling_max_weight
+    ):
+        raise ValueError(
+            "training.sampling_weight_min cannot be greater than training.sampling_weight_max"
+        )
     gradient_accumulation_steps = int(
         train_config.get("gradient_accumulation_steps", 1) or 1
     )
@@ -1074,6 +1090,8 @@ def train(
         augmentation_strength=train_config.get("augmentation", "medium"),
         use_weighted_sampling=train_config.get("use_weighted_sampling", True),
         weighted_sampling_power=weighted_sampling_power,
+        weighted_sampling_min_weight=weighted_sampling_min_weight,
+        weighted_sampling_max_weight=weighted_sampling_max_weight,
         pin_memory=(device.type == "cuda"),  # Pin memory only works on CUDA
         prefetch_factor=train_config.get("prefetch_factor", 2),
         persistent_workers=train_config.get("persistent_workers", True),
@@ -1098,9 +1116,21 @@ def train(
     class_weights = get_class_weights_for_loss(train_df, power=class_weight_power)
     class_weights = class_weights.to(device)
     logger.info(f"Class weights: {class_weights.tolist()}")
+    sampling_min_display = (
+        "None"
+        if weighted_sampling_min_weight is None
+        else f"{weighted_sampling_min_weight:.3f}"
+    )
+    sampling_max_display = (
+        "None"
+        if weighted_sampling_max_weight is None
+        else f"{weighted_sampling_max_weight:.3f}"
+    )
     logger.info(
-        "Balance controls | sampling_weight_power=%.3f, class_weight_power=%.3f",
+        "Balance controls | sampling_weight_power=%.3f, sampling_weight_min=%s, sampling_weight_max=%s, class_weight_power=%.3f",
         weighted_sampling_power,
+        sampling_min_display,
+        sampling_max_display,
         class_weight_power,
     )
 

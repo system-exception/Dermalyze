@@ -119,9 +119,7 @@ def apply_ham10000_search_space(
     data_cfg = config.setdefault("data", {})
 
     train_cfg["epochs"] = trial.suggest_int("epochs", 18, 36)
-    train_cfg["batch_size"] = trial.suggest_categorical(
-        "batch_size", [8, 12, 16, 24, 32]
-    )
+    train_cfg["batch_size"] = 16
     train_cfg["lr"] = trial.suggest_float("lr", 1e-5, 8e-4, log=True)
     train_cfg["weight_decay"] = trial.suggest_float(
         "weight_decay", 1e-4, 8e-2, log=True
@@ -140,13 +138,17 @@ def apply_ham10000_search_space(
 
     model_cfg["dropout_rate"] = trial.suggest_float("dropout_rate", 0.2, 0.6)
 
-    train_cfg["augmentation"] = trial.suggest_categorical(
-        "augmentation", ["light", "medium", "domain", "randaugment"]
-    )
+    train_cfg["augmentation"] = "randaugment"
 
     use_weighted_sampling = bool(train_cfg.get("use_weighted_sampling", True))
     train_cfg["sampling_weight_power"] = trial.suggest_float(
         "sampling_weight_power", 0.2, 0.8
+    )
+    train_cfg["sampling_weight_min"] = trial.suggest_float(
+        "sampling_weight_min", 0.25, 1.0
+    )
+    train_cfg["sampling_weight_max"] = trial.suggest_float(
+        "sampling_weight_max", 2.0, 8.0
     )
     if use_weighted_sampling:
         # Keep loss class weights off when weighted sampling is active.
@@ -156,10 +158,8 @@ def apply_ham10000_search_space(
             "class_weight_power", 0.2, 0.8
         )
 
-    loss_cfg["label_smoothing"] = trial.suggest_float("label_smoothing", 0.0, 0.08)
-    loss_cfg["type"] = trial.suggest_categorical(
-        "loss_type", ["focal", "cross_entropy", "label_smoothing"]
-    )
+    loss_cfg["label_smoothing"] = trial.suggest_float("label_smoothing", 0.01, 0.08)
+    loss_cfg["type"] = "label_smoothing"
 
     use_metadata = bool(data_cfg.get("use_metadata", False))
     if use_metadata:
@@ -177,29 +177,18 @@ def apply_ham10000_search_space(
         "early_stopping_patience", 5, 12
     )
 
-    scheduler_type = trial.suggest_categorical("scheduler_type", ["cosine", "onecycle"])
-    scheduler_cfg["type"] = scheduler_type
-    if scheduler_type == "cosine":
-        scheduler_cfg["T_0"] = trial.suggest_int("cosine_T0", 8, 24)
-        scheduler_cfg["T_mult"] = trial.suggest_int("cosine_Tmult", 1, 2)
-        scheduler_cfg["eta_min"] = trial.suggest_float(
-            "cosine_eta_min", 1e-7, 2e-5, log=True
-        )
-        scheduler_cfg.pop("warmup_pct", None)
-    else:
-        scheduler_cfg["warmup_pct"] = trial.suggest_float(
-            "onecycle_warmup_pct", 0.05, 0.3
-        )
-        scheduler_cfg.pop("T_0", None)
-        scheduler_cfg.pop("T_mult", None)
-        scheduler_cfg.pop("eta_min", None)
+    scheduler_cfg["type"] = "cosine"
+    scheduler_cfg["T_0"] = trial.suggest_int("cosine_T0", 8, 24)
+    scheduler_cfg["T_mult"] = trial.suggest_int("cosine_Tmult", 1, 2)
+    scheduler_cfg["eta_min"] = trial.suggest_float(
+        "cosine_eta_min", 1e-7, 2e-5, log=True
+    )
+    scheduler_cfg.pop("warmup_pct", None)
 
-    ema_enabled = trial.suggest_categorical("ema_enabled", [True, False])
-    ema_cfg["enabled"] = ema_enabled
-    if ema_enabled:
-        ema_cfg["decay"] = trial.suggest_float("ema_decay", 0.995, 0.9999)
-        ema_cfg["use_for_eval"] = True
-        ema_cfg["save_best"] = True
+    ema_cfg["enabled"] = True
+    ema_cfg["decay"] = trial.suggest_float("ema_decay", 0.995, 0.9999)
+    ema_cfg["use_for_eval"] = True
+    ema_cfg["save_best"] = True
 
     return config
 

@@ -315,26 +315,57 @@ class HAM10000Dataset(Dataset):
         """Get the distribution of classes in the dataset."""
         return self.df["label"].value_counts().to_dict()
 
-    def get_class_weights(self, power: float = 1.0) -> torch.Tensor:
+    def get_class_weights(
+        self,
+        power: float = 1.0,
+        min_weight: Optional[float] = None,
+        max_weight: Optional[float] = None,
+    ) -> torch.Tensor:
         """
         Compute class weights inversely proportional to class frequencies.
         Useful for weighted loss functions to handle class imbalance.
         """
+        if (
+            min_weight is not None
+            and max_weight is not None
+            and float(min_weight) > float(max_weight)
+        ):
+            raise ValueError(
+                "min_weight cannot be greater than max_weight for class weighting"
+            )
+
+        min_w = None if min_weight is None else float(min_weight)
+        max_w = None if max_weight is None else float(max_weight)
+
         class_counts = self.df["label"].value_counts()
         total = len(self.df)
         weights = []
         for label in sorted(LABEL_TO_IDX.keys()):
             count = class_counts.get(label, 1)
             base_weight = total / (len(LABEL_TO_IDX) * count)
-            weights.append(base_weight ** max(power, 0.0))
+            weight = base_weight ** max(power, 0.0)
+            if min_w is not None:
+                weight = max(weight, min_w)
+            if max_w is not None:
+                weight = min(weight, max_w)
+            weights.append(weight)
         return torch.tensor(weights, dtype=torch.float32)
 
-    def get_sample_weights(self, power: float = 1.0) -> torch.Tensor:
+    def get_sample_weights(
+        self,
+        power: float = 1.0,
+        min_weight: Optional[float] = None,
+        max_weight: Optional[float] = None,
+    ) -> torch.Tensor:
         """
         Get per-sample weights for WeightedRandomSampler.
         Each sample gets the weight of its class.
         """
-        class_weights = self.get_class_weights(power=power)
+        class_weights = self.get_class_weights(
+            power=power,
+            min_weight=min_weight,
+            max_weight=max_weight,
+        )
         sample_weights = []
         for label in self.df["label"]:
             idx = LABEL_TO_IDX[label]
@@ -646,6 +677,8 @@ def create_dataloaders(
     ] = "medium",
     use_weighted_sampling: bool = True,
     weighted_sampling_power: float = 1.0,
+    weighted_sampling_min_weight: Optional[float] = None,
+    weighted_sampling_max_weight: Optional[float] = None,
     pin_memory: bool = True,
     prefetch_factor: Optional[int] = 2,
     persistent_workers: bool = False,
@@ -673,6 +706,8 @@ def create_dataloaders(
         augmentation_strength: Strength of training augmentation
         use_weighted_sampling: Whether to use weighted sampling for class balance
         weighted_sampling_power: Power for inverse-frequency sampler weights (0=no weighting, 1=full)
+        weighted_sampling_min_weight: Optional minimum clamp for class weights
+        weighted_sampling_max_weight: Optional maximum clamp for class weights
         pin_memory: Whether to pin memory (faster GPU transfer, only useful for CUDA)
         prefetch_factor: Number of batches to prefetch per worker (None to disable)
         persistent_workers: Keep workers alive between epochs (faster but more memory)
@@ -740,7 +775,20 @@ def create_dataloaders(
     train_shuffle = True
 
     if use_weighted_sampling:
-        sample_weights = train_dataset.get_sample_weights(power=weighted_sampling_power)
+        if (
+            weighted_sampling_min_weight is not None
+            and weighted_sampling_max_weight is not None
+            and float(weighted_sampling_min_weight) > float(weighted_sampling_max_weight)
+        ):
+            raise ValueError(
+                "weighted_sampling_min_weight cannot be greater than weighted_sampling_max_weight"
+            )
+
+        sample_weights = train_dataset.get_sample_weights(
+            power=weighted_sampling_power,
+            min_weight=weighted_sampling_min_weight,
+            max_weight=weighted_sampling_max_weight,
+        )
         train_sampler = WeightedRandomSampler(
             weights=sample_weights,
             num_samples=len(train_dataset),

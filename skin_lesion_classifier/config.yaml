@@ -69,6 +69,8 @@ training:
   persistent_workers: true
   use_weighted_sampling: true
   sampling_weight_power: 0.35
+  sampling_weight_min: 0.5
+  sampling_weight_max: 5.0
   augmentation: light
 
   # Performance Optimizations
