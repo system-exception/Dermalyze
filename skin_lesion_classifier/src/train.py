@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import random
 import sys
@@ -781,7 +782,8 @@ def save_checkpoint(
         """Build a CPU model instance for TorchScript export."""
         export_model = model_builder()
         cpu_state_dict = {
-            name: tensor.detach().cpu() for name, tensor in best_model_state_dict.items()
+            name: tensor.detach().cpu()
+            for name, tensor in best_model_state_dict.items()
         }
         export_model.load_state_dict(cpu_state_dict)
         export_model.eval()
@@ -1129,6 +1131,14 @@ def train(
     stage1_epochs = int(train_config.get("stage1_epochs", 0) or 0)
     stage2_epochs_cfg = train_config.get("stage2_epochs", None)
     stage_epoch_mode = str(train_config.get("stage_epoch_mode", "fit_total")).lower()
+    if stage_epoch_mode != "explicit" and stage1_epochs > epochs:
+        logger.warning(
+            "training.stage1_epochs=%s exceeds training.epochs=%s in fit_total mode; clamping stage1_epochs to epochs.",
+            stage1_epochs,
+            epochs,
+        )
+        stage1_epochs = epochs
+
     if stage1_epochs > 0:
         if stage_epoch_mode == "explicit":
             if stage2_epochs_cfg is None:
@@ -1358,11 +1368,15 @@ def train(
         if stage_epochs <= 0:
             return None
         if scheduler_type == "onecycle":
+            steps_per_epoch = max(
+                1,
+                math.ceil(len(train_loader) / max(gradient_accumulation_steps, 1)),
+            )
             return OneCycleLR(
                 optimizer,
                 max_lr=optimizer.param_groups[0]["lr"],
                 epochs=stage_epochs,
-                steps_per_epoch=len(train_loader),
+                steps_per_epoch=steps_per_epoch,
                 pct_start=scheduler_config.get("warmup_pct", 0.1),
                 anneal_strategy="cos",
             )
@@ -1405,6 +1419,9 @@ def train(
     start_epoch = 0
     best_val_loss = float("inf")
     has_saved_best = False
+    resume_optimizer_state_dict: Optional[Dict[str, Any]] = None
+    resume_scheduler_state_dict: Optional[Dict[str, Any]] = None
+    resume_state_target_stage: Optional[str] = None
 
     if resume_from is not None and resume_from.exists():
         logger.info(f"Resuming from checkpoint: {resume_from}")
@@ -1412,11 +1429,50 @@ def train(
             str(resume_from), map_location="cpu", weights_only=False
         )
         model.load_state_dict(checkpoint["model_state_dict"])
-        start_epoch = checkpoint.get("epoch", -1) + 1
+        checkpoint_epoch = int(checkpoint.get("epoch", -1))
+        start_epoch = checkpoint_epoch + 1
         prev_metrics = checkpoint.get("metrics", {})
-        if stage1_epochs > 0:
+        checkpoint_stage = (
+            "stage1"
+            if stage1_epochs > 0 and checkpoint_epoch < stage1_epochs
+            else "stage2"
+        )
+        resume_stage = (
+            "stage1" if stage1_epochs > 0 and start_epoch < stage1_epochs else "stage2"
+        )
+        if checkpoint_stage == resume_stage:
+            resume_optimizer_state_dict = checkpoint.get("optimizer_state_dict")
+            resume_scheduler_state_dict = checkpoint.get("scheduler_state_dict")
+            resume_state_target_stage = resume_stage
+            logger.info(
+                "Will restore optimizer/scheduler state for %s on resume.",
+                resume_stage,
+            )
+        else:
+            logger.info(
+                "Resume crossed stage boundary (%s -> %s); optimizer/scheduler will be reinitialized for %s.",
+                checkpoint_stage,
+                resume_stage,
+                resume_stage,
+            )
+
+        if ema is not None:
+            checkpoint_ema_state = checkpoint.get("ema_state_dict")
+            if isinstance(checkpoint_ema_state, dict):
+                restored_ema_tensors = 0
+                for name, tensor in checkpoint_ema_state.items():
+                    if name in ema.shadow and isinstance(tensor, torch.Tensor):
+                        ema.shadow[name] = tensor.detach().to(device=device).clone()
+                        restored_ema_tensors += 1
+                logger.info("Restored EMA state (%d tensors).", restored_ema_tensors)
+            else:
+                logger.warning(
+                    "EMA is enabled but checkpoint has no ema_state_dict; EMA will restart from current model weights."
+                )
+
+        if stage1_epochs > 0 and resume_state_target_stage is None:
             logger.warning(
-                "Staged training resume: optimizer/scheduler state will not be restored."
+                "Staged training resume crossed stage boundary; optimizer/scheduler state will not be restored."
             )
 
         # Check if best checkpoint exists and load its metrics
@@ -1435,8 +1491,21 @@ def train(
         else:
             # Use metrics from resumed checkpoint as baseline
             best_val_loss = prev_metrics.get("val_loss", float("inf"))
-            has_saved_best = False
-            logger.warning("No existing best checkpoint found - will create new one")
+            try:
+                import shutil
+
+                shutil.copy(str(resume_from), str(best_checkpoint_path))
+                has_saved_best = True
+                logger.info(
+                    "No existing best checkpoint found - seeded from resume checkpoint (val_loss=%.4f)",
+                    best_val_loss,
+                )
+            except Exception as exc:
+                has_saved_best = False
+                logger.warning(
+                    "No existing best checkpoint found - failed to seed from resume checkpoint: %s",
+                    exc,
+                )
 
     # Training history
     history = {
@@ -1576,6 +1645,23 @@ def train(
             stage1_remaining,
             only_classifier=True,
         )
+        if (
+            resume_state_target_stage == "stage1"
+            and resume_optimizer_state_dict is not None
+        ):
+            try:
+                optimizer.load_state_dict(resume_optimizer_state_dict)
+                if scheduler is not None and resume_scheduler_state_dict is not None:
+                    scheduler.load_state_dict(resume_scheduler_state_dict)
+                logger.info("Restored optimizer/scheduler state for stage 1.")
+            except Exception as exc:
+                logger.warning(
+                    "Failed to restore stage 1 optimizer/scheduler state: %s",
+                    exc,
+                )
+            resume_optimizer_state_dict = None
+            resume_scheduler_state_dict = None
+            resume_state_target_stage = None
         stopped = run_stage(
             stage_name="Stage 1 (head warmup)",
             stage_start_epoch=current_epoch,
@@ -1605,6 +1691,23 @@ def train(
             stage2_remaining,
             only_classifier=False,
         )
+        if (
+            resume_state_target_stage == "stage2"
+            and resume_optimizer_state_dict is not None
+        ):
+            try:
+                optimizer.load_state_dict(resume_optimizer_state_dict)
+                if scheduler is not None and resume_scheduler_state_dict is not None:
+                    scheduler.load_state_dict(resume_scheduler_state_dict)
+                logger.info("Restored optimizer/scheduler state for stage 2.")
+            except Exception as exc:
+                logger.warning(
+                    "Failed to restore stage 2 optimizer/scheduler state: %s",
+                    exc,
+                )
+            resume_optimizer_state_dict = None
+            resume_scheduler_state_dict = None
+            resume_state_target_stage = None
         stopped = run_stage(
             stage_name="Stage 2 (fine-tune)",
             stage_start_epoch=current_epoch,
