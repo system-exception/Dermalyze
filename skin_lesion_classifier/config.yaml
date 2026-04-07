@@ -15,7 +15,7 @@ data:
   use_stratified_group_kfold: true
   kfold:
     n_splits: 5
-    fold_index: 0
+    fold_index: 1
     group_column: lesion_id
 
   # Metadata Configuration (Optional)
@@ -41,7 +41,7 @@ model:
   num_classes: 7
   image_size: 224
   pretrained: true
-  dropout_rate: 0.3
+  dropout_rate: 0.37606099749584054
   freeze_backbone: false
 
 # -----------------------------------------------------------------------------
@@ -49,29 +49,33 @@ model:
 # -----------------------------------------------------------------------------
 training:
   seed: 42
-  batch_size: 16
-  epochs: 40
-  lr: 0.00025
-  weight_decay: 0.02
+  batch_size: 32
+  epochs: 45
+  lr: 0.000688152438667204
+  weight_decay: 0.022225433823808757
 
   # Two-Stage Training
-  stage1_epochs: 5
-  stage1_lr: 0.001
-  stage1_weight_decay: 0.01
-  stage2_epochs: 35
+  stage1_epochs: 2
+  stage1_lr: 0.00007168802082137062
+  stage1_weight_decay: 0.005645066779546339
+  stage2_epochs: 27
   stage_epoch_mode: fit_total
-  stage2_lr: 0.0005
-  stage2_weight_decay: 0.02
+  stage2_lr: 0.000688152438667204
+  stage2_weight_decay: 0.022225433823808757
 
   # Data Loading
   num_workers: 4
   prefetch_factor: 2
   persistent_workers: true
   use_weighted_sampling: true
-  sampling_weight_power: 0.35
-  sampling_weight_min: 0.5
+  sampling_weight_power: 0.75
+  sampling_weight_min: 0.35
   sampling_weight_max: 5.0
-  augmentation: light
+  augmentation:
+    type: randaugment
+    minority_boost: true
+    mel_magnitude: 12
+    df_magnitude: 15
 
   # Performance Optimizations
   use_amp: true
@@ -89,27 +93,27 @@ training:
     type: cosine
     # warmup_pct: 0.05
     # Cosine scheduler options (if type: cosine):
-    T_0: 20
-    T_mult: 1
-    eta_min: 0.00001
+    T_0: 23
+    T_mult: 2
+    eta_min: 0.0000023756682069254373
 
   # Exponential Moving Average
   ema:
     enabled: true
-    decay: 0.999
+    decay: 0.9959603160258538
     use_for_eval: true
-    save_best: false
+    save_best: true
 
   # Early Stopping
-  early_stopping_patience: 7
+  early_stopping_patience: 12
 
 # -----------------------------------------------------------------------------
 # Loss Function
 # -----------------------------------------------------------------------------
 loss:
-  type: focal
+  type: label_smoothing
   alpha: null
-  label_smoothing: 0.03
+  label_smoothing: 0.05300178274831856
   class_weight_power: 0.0
 
 # -----------------------------------------------------------------------------
