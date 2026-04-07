@@ -174,7 +174,7 @@ def apply_colormap(heatmap: np.ndarray, colormap: str = "jet") -> np.ndarray:
         r = np.where(v > 0.5, 0.5 + 2.0 * (v - 0.5), 2.0 * v)
         r = np.clip(r, 0.0, 1.0)
         g = np.clip(1.0 - 2.0 * np.abs(v - 0.5), 0.0, 1.0)
-        b = np.where(v < 0.5, 0.5 - 2.0 * (v - 0.5), 0.0)
+        b = np.where(v < 0.5, 1.0 - 2.0 * v, 0.0)
         b = np.clip(b, 0.0, 1.0)
         colored = np.stack([r, g, b], axis=-1)
         return (colored * 255).astype(np.uint8)
