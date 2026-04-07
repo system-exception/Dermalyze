@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 import base64
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
