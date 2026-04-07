@@ -428,13 +428,81 @@ def _resolve_stage1_params(model: nn.Module) -> Any:
     """Resolve trainable parameters for stage-1 warmup."""
     metadata_mlp = getattr(model, "metadata_mlp", None)
     fusion_classifier = getattr(model, "fusion_classifier", None)
+    image_model = getattr(model, "image_model", None)
+    image_classifier = (
+        getattr(image_model, "classifier", None)
+        if isinstance(image_model, nn.Module)
+        else None
+    )
     if isinstance(metadata_mlp, nn.Module) and isinstance(fusion_classifier, nn.Module):
-        return list(metadata_mlp.parameters()) + list(fusion_classifier.parameters())
+        stage1_modules = [metadata_mlp, fusion_classifier]
+        if isinstance(image_classifier, nn.Module):
+            stage1_modules.append(image_classifier)
+
+        params: list[nn.Parameter] = []
+        seen: set[int] = set()
+        for module in stage1_modules:
+            for param in module.parameters():
+                param_id = id(param)
+                if param_id in seen:
+                    continue
+                seen.add(param_id)
+                if param.requires_grad:
+                    params.append(param)
+
+        if params:
+            return params
 
     classifier = getattr(model, "classifier", None)
     if isinstance(classifier, nn.Module):
-        return classifier.parameters()
-    return model.parameters()
+        classifier_params = [p for p in classifier.parameters() if p.requires_grad]
+        if classifier_params:
+            return classifier_params
+
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    if trainable_params:
+        return trainable_params
+    return list(model.parameters())
+
+
+def _get_optimizer_step_counters(
+    optimizer: torch.optim.Optimizer,
+) -> Dict[int, int]:
+    """Capture per-parameter optimizer step counters."""
+    step_counters: Dict[int, int] = {}
+    for group in optimizer.param_groups:
+        for param in group.get("params", []):
+            state = optimizer.state.get(param, {})
+            step_value = state.get("step")
+            if isinstance(step_value, torch.Tensor):
+                step_counters[id(param)] = int(step_value.item())
+            elif isinstance(step_value, int):
+                step_counters[id(param)] = step_value
+            else:
+                step_counters[id(param)] = -1
+    return step_counters
+
+
+def _optimizer_step_applied(
+    optimizer: torch.optim.Optimizer,
+    step_counters_before: Dict[int, int],
+) -> bool:
+    """Return True when at least one optimizer param step counter increased."""
+    for group in optimizer.param_groups:
+        for param in group.get("params", []):
+            before_step = step_counters_before.get(id(param), -1)
+            state = optimizer.state.get(param, {})
+            step_value = state.get("step")
+            if isinstance(step_value, torch.Tensor):
+                after_step = int(step_value.item())
+            elif isinstance(step_value, int):
+                after_step = step_value
+            else:
+                after_step = -1
+
+            if after_step > before_step:
+                return True
+    return False
 
 
 def train_one_epoch(
@@ -551,12 +619,13 @@ def train_one_epoch(
                     scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 if scaler is not None:
-                    scale_before = scaler.get_scale()
+                    step_counters_before = _get_optimizer_step_counters(optimizer)
                     scaler.step(optimizer)
                     scaler.update()
-                    # GradScaler can skip optimizer.step() on overflow; avoid advancing
-                    # EMA/scheduler when no parameter update actually happened.
-                    optimizer_stepped = scaler.get_scale() >= scale_before
+                    optimizer_stepped = _optimizer_step_applied(
+                        optimizer,
+                        step_counters_before,
+                    )
                 else:
                     optimizer.step()
                     optimizer_stepped = True
