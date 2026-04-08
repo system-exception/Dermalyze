@@ -468,7 +468,18 @@ This document explains all supported parameters in `config.yaml`, including vali
 ### `training.early_stopping_patience`
 
 - **Type:** int
-- **Default:** `7`  
+- **Default:** `15`  
+- **Description:** Number of epochs without sufficient improvement before training stops.
+
+### `training.early_stopping_min_delta`
+
+- **Type:** float
+- **Default:** Auto if omitted:
+  - `0.0001` when `training.best_checkpoint_mode` resolves to `max`
+  - `0.001` when `training.best_checkpoint_mode` resolves to `min`
+- **Valid values:** `>= 0`
+- **Description:** Minimum metric improvement required to reset early-stopping patience.
+- **Recommendation:** For macro metrics (`macro_f1`, `macro_recall`, `macro_recall_f1_mean`), use smaller values such as `1e-4` to avoid stopping before small but meaningful gains.
 
 ---
 
@@ -491,8 +502,8 @@ This document explains all supported parameters in `config.yaml`, including vali
 
 - **Type:** null or list[float]
 - **Default:** null
-- **Description:** Manual class weights. If null, computed class weights are used.
-- **Notes:** When `loss.type == focal`, used as `focal_alpha`; otherwise used as class weights.
+- **Description:** Manual class weights for focal loss alpha.
+- **Notes:** Used only when `loss.type == focal`. Ignored for `cross_entropy` and `label_smoothing`.
 
 ### `loss.label_smoothing`
 

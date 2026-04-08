@@ -1549,15 +1549,28 @@ def train(
         f"Best checkpoint selection: metric={best_checkpoint_metric}, mode={best_checkpoint_mode}"
     )
 
+    early_stopping_min_delta_cfg = train_config.get("early_stopping_min_delta")
+    if early_stopping_min_delta_cfg is None:
+        # Smaller default delta for bounded score metrics to avoid stopping
+        # before incremental but meaningful gains.
+        early_stopping_min_delta = 1e-4 if best_checkpoint_mode == "max" else 1e-3
+    else:
+        early_stopping_min_delta = float(early_stopping_min_delta_cfg)
+    if early_stopping_min_delta < 0.0:
+        raise ValueError("training.early_stopping_min_delta must be >= 0")
+
     # Early stopping - aligned with best checkpoint metric
     early_stopping = EarlyStopping(
         patience=train_config.get("early_stopping_patience", 15),
-        min_delta=0.001,
+        min_delta=early_stopping_min_delta,
         mode=best_checkpoint_mode,
     )
     logger.info(
-        f"Early stopping: patience={train_config.get('early_stopping_patience', 15)}, "
-        f"monitoring {best_checkpoint_metric} ({best_checkpoint_mode})"
+        "Early stopping: patience=%s, min_delta=%.6f, monitoring %s (%s)",
+        train_config.get("early_stopping_patience", 15),
+        early_stopping_min_delta,
+        best_checkpoint_metric,
+        best_checkpoint_mode,
     )
 
     # Resume from checkpoint if specified
