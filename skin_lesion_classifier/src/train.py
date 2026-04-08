@@ -767,6 +767,7 @@ def validate(
         - loss, accuracy (basic metrics)
         - macro_precision, macro_recall, macro_f1 (per-class averages)
         - macro_recall_f1_mean (average of macro_recall and macro_f1)
+        - weighted_recall, weighted_f1 (support-weighted averages)
     """
     model.eval()
     metrics = MetricTracker()
@@ -803,28 +804,39 @@ def validate(
 
     basic_metrics = metrics.compute()
     
-    # Compute macro-averaged per-class metrics
+    # Compute macro and weighted metrics
     all_preds = np.array(metrics.all_preds)
     all_targets = np.array(metrics.all_targets)
     
     if len(all_preds) > 0 and len(all_targets) > 0:
         labels = list(range(num_classes))
-        precision, recall, f1, _ = precision_recall_fscore_support(
+        macro_precision, macro_recall, macro_f1, _ = precision_recall_fscore_support(
             all_targets,
             all_preds,
             labels=labels,
             average='macro',
             zero_division=0,
         )
-        basic_metrics['macro_precision'] = float(precision)
-        basic_metrics['macro_recall'] = float(recall)
-        basic_metrics['macro_f1'] = float(f1)
-        basic_metrics['macro_recall_f1_mean'] = float((recall + f1) / 2.0)
+        _, weighted_recall, weighted_f1, _ = precision_recall_fscore_support(
+            all_targets,
+            all_preds,
+            labels=labels,
+            average='weighted',
+            zero_division=0,
+        )
+        basic_metrics['macro_precision'] = float(macro_precision)
+        basic_metrics['macro_recall'] = float(macro_recall)
+        basic_metrics['macro_f1'] = float(macro_f1)
+        basic_metrics['macro_recall_f1_mean'] = float((macro_recall + macro_f1) / 2.0)
+        basic_metrics['weighted_recall'] = float(weighted_recall)
+        basic_metrics['weighted_f1'] = float(weighted_f1)
     else:
         basic_metrics['macro_precision'] = 0.0
         basic_metrics['macro_recall'] = 0.0
         basic_metrics['macro_f1'] = 0.0
         basic_metrics['macro_recall_f1_mean'] = 0.0
+        basic_metrics['weighted_recall'] = 0.0
+        basic_metrics['weighted_f1'] = 0.0
 
     return basic_metrics
 
@@ -1836,6 +1848,8 @@ def train(
                     "macro_recall": val_metrics.get("macro_recall", 0.0),
                     "macro_f1": val_metrics.get("macro_f1", 0.0),
                     "macro_recall_f1_mean": val_metrics.get("macro_recall_f1_mean", 0.0),
+                    "weighted_recall": val_metrics.get("weighted_recall", 0.0),
+                    "weighted_f1": val_metrics.get("weighted_f1", 0.0),
                 },
                 config=config,
                 output_dir=output_dir,
