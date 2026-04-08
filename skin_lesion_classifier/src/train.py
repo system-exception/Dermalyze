@@ -421,6 +421,28 @@ class MetricTracker:
         }
 
 
+def _metric_name_candidates(metric_name: str) -> Tuple[str, ...]:
+    """Return supported aliases for a configured validation metric name."""
+    normalized = str(metric_name).strip()
+    alias_map = {
+        "val_loss": ("val_loss", "loss"),
+        "loss": ("loss", "val_loss"),
+        "val_acc": ("val_acc", "accuracy", "acc"),
+        "accuracy": ("accuracy", "val_acc", "acc"),
+        "acc": ("acc", "accuracy", "val_acc"),
+    }
+    return alias_map.get(normalized, (normalized,))
+
+
+def _get_metric_value(metrics: Dict[str, float], metric_name: str) -> Optional[float]:
+    """Lookup metric value with backward-compatible aliases."""
+    for candidate in _metric_name_candidates(metric_name):
+        value = metrics.get(candidate)
+        if value is not None:
+            return float(value)
+    return None
+
+
 def _parse_batch(
     batch: Tuple[torch.Tensor, torch.Tensor]
     | Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
@@ -813,6 +835,8 @@ def save_checkpoint(
     ema: Optional[ModelEMA] = None,
     save_ema_for_best: bool = False,
     metadata_encoder_state: Optional[Dict[str, Any]] = None,
+    best_metric_name: Optional[str] = None,
+    best_metric_value: Optional[float] = None,
 ) -> None:
     """Save model checkpoint."""
     checkpoint = {
@@ -848,7 +872,18 @@ def save_checkpoint(
             torch.save(best_checkpoint, str(best_path))
         else:
             torch.save(checkpoint, str(best_path))
-        logger.info(f"Saved best model with val_loss: {metrics['val_loss']:.4f}")
+        if best_metric_name is not None and best_metric_value is not None:
+            logger.info(
+                "Saved best model with %s: %.4f",
+                best_metric_name,
+                best_metric_value,
+            )
+        else:
+            best_val_loss = metrics.get("val_loss", metrics.get("loss"))
+            if best_val_loss is not None:
+                logger.info("Saved best model with val_loss: %.4f", best_val_loss)
+            else:
+                logger.info("Saved best model.")
 
     # Save epoch checkpoint (optional, controlled by config)
     save_epoch_checkpoints = config.get("output", {}).get(
@@ -1458,7 +1493,9 @@ def train(
 
     # Resume from checkpoint if specified
     start_epoch = 0
-    best_metric_value = float("inf") if best_checkpoint_mode == "min" else float("-inf")
+    best_metric_value: float = (
+        float("inf") if best_checkpoint_mode == "min" else float("-inf")
+    )
     has_saved_best = False
     resume_optimizer_state_dict: Optional[Dict[str, Any]] = None
     resume_scheduler_state_dict: Optional[Dict[str, Any]] = None
@@ -1524,20 +1561,42 @@ def train(
                 str(best_checkpoint_path), map_location="cpu", weights_only=False
             )
             best_metrics = best_checkpoint.get("metrics", {})
-            best_metric_value = best_metrics.get(
-                best_checkpoint_metric,
+            default_best_metric = (
                 float("inf") if best_checkpoint_mode == "min" else float("-inf")
             )
+            loaded_best_metric = _get_metric_value(best_metrics, best_checkpoint_metric)
+            if loaded_best_metric is None:
+                best_metric_value = default_best_metric
+                logger.warning(
+                    "Configured metric '%s' not found in saved best-checkpoint metrics. "
+                    "Checked aliases: %s. Available metrics: %s",
+                    best_checkpoint_metric,
+                    list(_metric_name_candidates(best_checkpoint_metric)),
+                    list(best_metrics.keys()),
+                )
+            else:
+                best_metric_value = loaded_best_metric
             has_saved_best = True
             logger.info(
                 f"Best {best_checkpoint_metric} from existing checkpoint: {best_metric_value:.4f}"
             )
         else:
             # Use metrics from resumed checkpoint as baseline
-            best_metric_value = prev_metrics.get(
-                best_checkpoint_metric,
+            default_best_metric = (
                 float("inf") if best_checkpoint_mode == "min" else float("-inf")
             )
+            loaded_best_metric = _get_metric_value(prev_metrics, best_checkpoint_metric)
+            if loaded_best_metric is None:
+                best_metric_value = default_best_metric
+                logger.warning(
+                    "Configured metric '%s' not found in resume-checkpoint metrics. "
+                    "Checked aliases: %s. Available metrics: %s",
+                    best_checkpoint_metric,
+                    list(_metric_name_candidates(best_checkpoint_metric)),
+                    list(prev_metrics.keys()),
+                )
+            else:
+                best_metric_value = loaded_best_metric
             try:
                 import shutil
 
@@ -1642,11 +1701,16 @@ def train(
             history["lr"].append(current_lr)
 
             # Check if this is the best checkpoint based on configured metric
-            current_metric_value = val_metrics.get(best_checkpoint_metric)
+            current_metric_value = _get_metric_value(
+                val_metrics, best_checkpoint_metric
+            )
             if current_metric_value is None:
                 logger.warning(
-                    f"Configured metric '{best_checkpoint_metric}' not found in validation metrics. "
-                    f"Available metrics: {list(val_metrics.keys())}"
+                    "Configured metric '%s' not found in validation metrics. "
+                    "Checked aliases: %s. Available metrics: %s",
+                    best_checkpoint_metric,
+                    list(_metric_name_candidates(best_checkpoint_metric)),
+                    list(val_metrics.keys()),
                 )
                 is_best = False
             else:
@@ -1662,6 +1726,8 @@ def train(
                         f"New best {best_checkpoint_metric}: {best_metric_value:.4f}"
                     )
 
+            val_loss = float(val_metrics["loss"])
+            val_acc = float(val_metrics["accuracy"])
             save_checkpoint(
                 model=model,
                 optimizer=optimizer,
@@ -1670,8 +1736,11 @@ def train(
                 metrics={
                     "train_loss": train_metrics["loss"],
                     "train_acc": train_metrics["accuracy"],
-                    "val_loss": val_metrics["loss"],
-                    "val_acc": val_metrics["accuracy"],
+                    "loss": val_loss,
+                    "accuracy": val_acc,
+                    "acc": val_acc,
+                    "val_loss": val_loss,
+                    "val_acc": val_acc,
                     "macro_precision": val_metrics.get("macro_precision", 0.0),
                     "macro_recall": val_metrics.get("macro_recall", 0.0),
                     "macro_f1": val_metrics.get("macro_f1", 0.0),
@@ -1684,10 +1753,14 @@ def train(
                 ema=ema,
                 save_ema_for_best=ema_save_best,
                 metadata_encoder_state=metadata_encoder_state,
+                best_metric_name=best_checkpoint_metric,
+                best_metric_value=current_metric_value if is_best else None,
             )
 
             if enable_early_stopping:
-                early_stop_metric_value = val_metrics.get(best_checkpoint_metric)
+                early_stop_metric_value = _get_metric_value(
+                    val_metrics, best_checkpoint_metric
+                )
                 if early_stop_metric_value is None:
                     logger.warning(
                         f"Early stopping metric '{best_checkpoint_metric}' not found in validation metrics, "
