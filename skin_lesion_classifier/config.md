@@ -433,11 +433,15 @@ This document explains all supported parameters in `config.yaml`, including vali
 
 - **Type:** bool
 - **Default:** `true`
+- **Description:** Evaluate validation metrics using EMA-smoothed weights instead of raw model weights.
+- **Notes:** If `training.ema.save_best: true`, training forces `use_for_eval` behavior for consistency so the metric used to pick the best checkpoint matches the weights being saved.
 
 ### `training.ema.save_best`
 
 - **Type:** bool
 - **Default:** `false`  
+- **Description:** When true, saves EMA weights to `checkpoint_best.pt` (if EMA is enabled).
+- **Notes:** If `training.ema.enabled: false`, this flag has no effect.
 
 ### Best Checkpoint Selection
 

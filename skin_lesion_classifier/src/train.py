@@ -1281,6 +1281,18 @@ def train(
     ema_decay = float(ema_config.get("decay", 0.999))
     ema_use_for_eval = bool(ema_config.get("use_for_eval", True))
     ema_save_best = bool(ema_config.get("save_best", True))
+    if ema_save_best and not ema_enabled:
+        logger.warning(
+            "training.ema.save_best=true but training.ema.enabled=false; "
+            "EMA best-checkpoint export is disabled."
+        )
+    if ema_enabled and ema_save_best and not ema_use_for_eval:
+        logger.warning(
+            "training.ema.save_best=true with training.ema.use_for_eval=false can "
+            "score non-EMA weights while saving EMA weights. Enabling "
+            "training.ema.use_for_eval for checkpoint-selection consistency."
+        )
+        ema_use_for_eval = True
 
     # Create DataLoaders
     logger.info("Creating DataLoaders...")
