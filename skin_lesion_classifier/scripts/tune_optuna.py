@@ -406,7 +406,12 @@ def run_trial_evaluation(
     data_config = trial_config.get("data", {})
     seg_config = data_config.get("segmentation", {})
     
-    use_segmentation = bool(seg_config.get("use_segmentation_roi_crop", False))
+    # Prefer canonical config keys (enabled/filename_suffixes), while keeping
+    # backward compatibility with older key names used in previous scripts.
+    use_segmentation = seg_config.get("enabled")
+    if use_segmentation is None:
+        use_segmentation = seg_config.get("use_segmentation_roi_crop", False)
+    use_segmentation = bool(use_segmentation)
     if use_segmentation:
         command.extend(["--use-segmentation-roi-crop"])
         
@@ -424,7 +429,9 @@ def run_trial_evaluation(
         else:
             command.extend(["--no-segmentation-required"])
         
-        mask_suffixes = seg_config.get("mask_suffixes")
+        mask_suffixes = seg_config.get("filename_suffixes")
+        if mask_suffixes is None:
+            mask_suffixes = seg_config.get("mask_suffixes")
         if mask_suffixes is not None:
             command.extend(["--segmentation-mask-suffixes"] + list(mask_suffixes))
     else:
